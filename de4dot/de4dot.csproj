@@ -31,8 +31,13 @@
     de4dot 的编译期依赖）。两个项目都输出到 Release\<tfm>\，构建完就在一起了。
   -->
   <Target Name="BuildEazWorker" BeforeTargets="Build">
+    <!--
+      先 Restore 再 Build：worker 不在解决方案里（避免成为 de4dot 的编译期依赖），
+      所以解决方案的隐式还原不会覆盖它；CI 全新检出时它的 obj/project.assets.json
+      不存在，直接 Build 会报 NETSDK1004。这里显式 Restore 一下。
+    -->
     <MSBuild Projects="$(MSBuildThisFileDirectory)..\de4dot.eazworker\de4dot.eazworker.csproj"
-             Targets="Build"
+             Targets="Restore;Build"
              Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework)" />
   </Target>
 
