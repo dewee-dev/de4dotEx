@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    回归夹具：两个"长得像但不对"的字符串方法（反例）。
+    同一个程序集里放两种反例，任何一个被误判都说明识别规则过宽。
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>LookalikeStringMethod</AssemblyName>
+    <RootNamespace>LookalikeStringMethodFixture</RootNamespace>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <SignAssembly>false</SignAssembly>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+</Project>

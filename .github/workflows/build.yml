@@ -36,6 +36,17 @@ jobs:
           dotnet publish -c Release -f $env:DOTNET_RUNTIME -o publish-$env:DOTNET_RUNTIME de4dot
           Remove-Item publish-$env:DOTNET_RUNTIME\*.pdb, publish-$env:DOTNET_RUNTIME\*.xml
 
+      - name: Run regression tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # 只编 net48：和发布的 de4dot.exe 一致，也避开本机可能没有的 net10 目标包
+          dotnet build -c Release -p:TargetFrameworks=net48 tests/EazfuscatorTests/EazfuscatorTests.csproj
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+          & tests/EazfuscatorTests/bin/Release/net48/EazfuscatorTests.exe --de4dot Release/net48/de4dot.exe
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
       - name: Build BeaEngine
         shell: pwsh
         run: |
@@ -147,6 +158,13 @@ jobs:
           cp "$so64" publish-${DOTNET_RUNTIME}/libBeaEngine.so
           cp beaengine/src/COPYING.txt publish-${DOTNET_RUNTIME}/LICENSES/LICENSE.BeaEngine.GPL.txt
           cp beaengine/src/COPYING.LESSER.txt publish-${DOTNET_RUNTIME}/LICENSES/LICENSE.BeaEngine.LGPL.txt
+
+      - name: Run regression tests
+        run: |
+          # 与真实样本无关的部分（识别规则 + 命令行选项）在所有平台都要过；
+          # 需要桩 Unpacker-net48.exe 的场景会自动跳过。
+          dotnet build -c Release -p:TargetFrameworks=${DOTNET_RUNTIME} tests/EazfuscatorTests/EazfuscatorTests.csproj
+          dotnet tests/EazfuscatorTests/bin/Release/${DOTNET_RUNTIME}/EazfuscatorTests.dll --de4dot publish-${DOTNET_RUNTIME}/de4dot
 
       - name: Upload publish folder
         uses: actions/upload-artifact@v7

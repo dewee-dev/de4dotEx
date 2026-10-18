@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Eazfuscator.NET 现代版本支持的回归测试。
+
+    单独一个工程，不加入任何 .sln：它只做"跑 de4dot 并断言输出"，
+    不应该影响正常的构建与发布。
+
+    两个目标框架的用途：
+      net48   —— Windows 本地与 CI 用，和发布出来的 de4dot.exe 版本一致；
+      net10.0 —— Linux CI 用（那里没有 .NET Framework）。
+    编译时用 -p:TargetFrameworks=net48（或 net10.0）指定其中一个即可。
+  -->
+  <PropertyGroup>
+    <TargetFrameworks>net48;net10.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>EazfuscatorTests</AssemblyName>
+    <RootNamespace>de4dot.tests</RootNamespace>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <SignAssembly>false</SignAssembly>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- fixtures/ 下是独立的夹具工程，不能被本工程的默认通配符收进来 -->
+  <ItemGroup>
+    <Compile Remove="fixtures/**" />
+    <None Remove="fixtures/**" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="All" />
+  </ItemGroup>
+
+</Project>

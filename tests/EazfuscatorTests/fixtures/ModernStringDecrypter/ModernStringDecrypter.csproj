@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    回归夹具：现代 Eazfuscator.NET 字符串解密器形状（正例）。
+    编译成 netstandard2.0，任何平台都能用 dotnet build 生成，不需要 ilasm/ildasm。
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>ModernStringDecrypter</AssemblyName>
+    <RootNamespace>ModernStringDecrypterFixture</RootNamespace>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <SignAssembly>false</SignAssembly>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+</Project>

@@ -135,6 +135,11 @@ Example:
 de4dot MyApp.exe -o MyApp-cleaned.exe --eaz-unpacker C:\tools\EazUnpacker --dont-rename -v
 ```
 
+Regression tests live in [`tests/EazfuscatorTests`](tests/EazfuscatorTests/README.md).
+They build small C# fixtures on the fly (no Eazfuscator, no ilasm) and assert both
+the detection rule and the delegation pipeline, including the fallback paths.
+They run on every CI build.
+
 Warning
 =======
 
