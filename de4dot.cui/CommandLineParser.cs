@@ -23,6 +23,7 @@ using dnlib.DotNet;
 using dnlib.DotNet.Writer;
 using de4dot.code;
 using de4dot.code.deobfuscators;
+using de4dot.code.deobfuscators.Eazfuscator_NET;
 using de4dot.code.AssemblyClient;
 using de4dot.code.renamer;
 
@@ -115,6 +116,23 @@ namespace de4dot.cui {
 			
 			miscOptions.Add(new NoArgOption("d", null, "Detect obfuscators and exit", () => {
 				filesOptions.DetectObfuscators = true;
+			}));
+			miscOptions.Add(new NoArgOption(null, "eaz-unpack", "Unpack modern Eazfuscator.NET assemblies with EazUnpacker (enabled by default)", () => {
+				EazUnpackerSettings.Enabled = true;
+			}));
+			miscOptions.Add(new NoArgOption(null, "no-eaz-unpack", "Don't hand modern Eazfuscator.NET assemblies to EazUnpacker", () => {
+				EazUnpackerSettings.Enabled = false;
+			}));
+			miscOptions.Add(new OneArgOption(null, "eaz-unpacker", "Path to EazUnpacker (Unpacker-net48.exe or its directory); defaults to an eaz-unpacker\\ subdirectory, the de4dot directory, or PATH", "path", (val) => {
+				EazUnpackerSettings.UnpackerPath = val;
+			}));
+			miscOptions.Add(new OneArgOption(null, "eaz-unpack-timeout", "EazUnpacker timeout in seconds (default: 1800)", "seconds", (val) => {
+				if (!int.TryParse(val, out int seconds) || seconds <= 0)
+					ExitError($"Invalid timeout: {val}");
+				EazUnpackerSettings.TimeoutSeconds = seconds;
+			}));
+			miscOptions.Add(new NoArgOption(null, "keep-eaz-temp", "Keep the temporary EazUnpacker output directory", () => {
+				EazUnpackerSettings.KeepTempFiles = true;
 			}));
 			miscOptions.Add(new OneArgOption(null, "asm-path", "Add an assembly search path", "path", (val) => {
 				TheAssemblyResolver.Instance.AddSearchDirectory(val);

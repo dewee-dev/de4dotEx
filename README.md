@@ -71,7 +71,7 @@ Supported obfuscators/packers
 * Dotfuscator
 * .NET Reactor
 * DoubleZero - Merged from https://github.com/gkucherin/de4dot
-* Eazfuscator.NET
+* Eazfuscator.NET - 1.x-2.5 built in; 2021.1 and later via the [EazUnpacker bridge](#modern-eazfuscatornet-support-eazunpacker-bridge)
 * Goliath.NET
 * ILProtector
 * MaxtoCode
@@ -85,6 +85,55 @@ Supported obfuscators/packers
 * Xenocode
 
 Some of the above obfuscators are rarely used (eg. Goliath.NET), so they have had much less testing. Help me out by reporting bugs or problems you find.
+
+Modern Eazfuscator.NET support (EazUnpacker bridge)
+===================================================
+
+The built-in `Eazfuscator.NET` module only understands the 1.x-2.5 generation of
+Eazfuscator.NET. For 2021.1 and later, de4dotEx recognises the modern string
+decrypter shape and hands the file to an external
+[EazUnpacker](https://github.com/dewee-dev/EazUnpacker) process, then reloads the
+unpacked assembly and continues with its normal pipeline (renaming, control-flow
+cleanup).
+
+Detection uses the same fingerprint as EazUnpacker's own EazFixer backend: an
+`internal static string(int)` method whose body calls a `string(int, bool)`
+overload in the same module. Legacy detection is untouched, so 1.x-2.5 files
+still take the original code path.
+
+All options are optional:
+
+| Option | Meaning |
+| --- | --- |
+| `--eaz-unpacker <path>` | `Unpacker-net48.exe`, or the directory containing it |
+| `--eaz-unpack-timeout <sec>` | Timeout for one unpack (default: 1800) |
+| `--no-eaz-unpack` | Never delegate; keep the old behaviour |
+| `--keep-eaz-temp` | Keep the temporary unpack directory for troubleshooting |
+
+When `--eaz-unpacker` isn't given, the path is resolved from the `EAZ_UNPACKER`
+environment variable, then `eaz-unpacker\Unpacker-net48.exe` next to de4dot, then
+`Unpacker-net48.exe` next to de4dot, then `PATH`.
+
+The unpacker must be complete: `worker\Unpacker.Worker.exe` has to sit next to
+`Unpacker-net48.exe`, exactly as the official EazUnpacker release zip is laid out.
+
+Behaviour notes:
+
+* `-d` only reports `Eazfuscator.NET (modern, 2021.1+)`; it never runs the unpacker.
+* If the unpacker is missing, times out, or fails, de4dotEx logs a warning and
+  still writes an output file. The legacy Eazfuscator.NET recovery is skipped for
+  modern files, because it can't handle them and would fail on the missing types.
+* Exit code `2` ("partial completion") from EazUnpacker is accepted - it still
+  produced a usable assembly.
+* EazUnpacker already recovers readable names, so `--dont-rename` is often the
+  better choice afterwards if you want to keep them.
+
+Example:
+
+```bash
+# Put the unpacker next to de4dot, or point at it explicitly
+de4dot MyApp.exe -o MyApp-cleaned.exe --eaz-unpacker C:\tools\EazUnpacker --dont-rename -v
+```
 
 Warning
 =======
