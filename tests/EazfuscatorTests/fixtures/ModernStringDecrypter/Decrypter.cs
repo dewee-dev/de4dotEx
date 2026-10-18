@@ -24,10 +24,15 @@ namespace ModernStringDecrypterFixture {
 	// 不需要真的加密，也不依赖 Eazfuscator 本身，只要 IL 形状对就行。
 	internal static class Decrypter {
 		internal static string Get(int id) => Resolve(id, false);
-		internal static string Resolve(int id, bool flag) => flag ? "DE4DOT_TEST_ORIGINAL" : "x" + id;
+		internal static string Resolve(int id, bool flag) => flag ? "flag" : "DE4DOT_TEST_" + id;
 	}
 
 	public static class Entry {
 		public static string Run(int i) => Decrypter.Get(i);
+
+		// 常量参数：内置 worker 只收集 ldc.i4 <id> 紧跟 call 解密器 的调用点，
+		// 上面那个 Run(int) 的参数来自 ldarg，不会被收集。
+		public static string Alpha() => Decrypter.Get(1001);
+		public static string Beta() => Decrypter.Get(1002);
 	}
 }

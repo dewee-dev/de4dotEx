@@ -152,6 +152,7 @@ namespace de4dot.tests {
 			using (var harness = new Harness(repoRoot, Path.GetFullPath(de4dot), options.DotnetPath, options.Keep, options.Filter)) {
 				harness.Add("modern-detected", harness.ModernDetected);
 				harness.Add("lookalike-not-detected", harness.LookalikeNotDetected);
+				harness.Add("worker-recovers-strings", harness.WorkerRecoversStrings);
 				harness.Add("bridge-replaces-module", harness.BridgeReplacesModule);
 				harness.Add("bridge-disabled-falls-back", harness.BridgeDisabledFallsBack);
 				harness.Add("bridge-incomplete-unpacker-falls-back", harness.BridgeIncompleteUnpackerFallsBack);

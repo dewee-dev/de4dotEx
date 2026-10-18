@@ -131,6 +131,27 @@ namespace de4dot.tests {
 			Assert.NotContains(result.Output, "Eazfuscator.NET", "detection output");
 		}
 
+		/// <summary>
+		/// 内置 worker：应该把 ldc.i4 + call 解密器 换成 ldstr 明文。
+		/// 这条路径不需要外部 EazUnpacker。
+		/// </summary>
+		public void WorkerRecoversStrings() {
+			RequireWindows();
+
+			var input = FixtureAssembly("ModernStringDecrypter");
+			var output = NewOutputPath("worker-strings.dll");
+
+			var result = RunDe4dot(input, "-o", output, "--dont-rename");
+
+			Assert.True(result.ExitCode == 0, "de4dot exited with " + result.ExitCode);
+			Assert.Contains(result.Output, "Recovered 2 strings with the built-in", "de4dot log");
+			Assert.True(File.Exists(output), "de4dot didn't write " + output);
+			Assert.True(Assert.FileContainsText(output, "DE4DOT_TEST_1001"),
+				"output should contain the inlined string for id 1001");
+			Assert.True(Assert.FileContainsText(output, "DE4DOT_TEST_1002"),
+				"output should contain the inlined string for id 1002");
+		}
+
 		/// <summary>委托链路：解包器交出的程序集必须真的替换掉原始模块。</summary>
 		public void BridgeReplacesModule() {
 			RequireWindows();
@@ -140,7 +161,8 @@ namespace de4dot.tests {
 			var unpackerDir = CreateStubUnpacker(marker, withWorker: true);
 			var output = NewOutputPath("bridge-replaces.dll");
 
-			var result = RunDe4dot(input, "-o", output, "--dont-rename", "--eaz-unpacker", unpackerDir);
+			// --no-eaz-worker：强制走外部解包器那条路（默认会先试内置 worker）
+			var result = RunDe4dot(input, "-o", output, "--dont-rename", "--no-eaz-worker", "--eaz-unpacker", unpackerDir);
 
 			Assert.True(result.ExitCode == 0, "de4dot exited with " + result.ExitCode);
 			Assert.Contains(result.Output, "EazUnpacker produced", "de4dot log");
@@ -151,14 +173,17 @@ namespace de4dot.tests {
 				"output still contains the original fixture (the module wasn't replaced)");
 		}
 
-		/// <summary>--no-eaz-unpack：只告警，退回通用处理，仍然产出文件。</summary>
+		/// <summary>
+		/// 两个后端都关掉（--no-eaz-worker --no-eaz-unpack）：只告警，退回通用处理，仍然产出文件。
+		/// 注意：单独 --no-eaz-unpack 不会禁用内置 worker，所以这里两个都关才能走到"什么都不恢复"的分支。
+		/// </summary>
 		public void BridgeDisabledFallsBack() {
 			RequireWindows();
 
 			var input = FixtureAssembly("ModernStringDecrypter");
 			var output = NewOutputPath("bridge-disabled.dll");
 
-			var result = RunDe4dot(input, "-o", output, "--dont-rename", "--no-eaz-unpack");
+			var result = RunDe4dot(input, "-o", output, "--dont-rename", "--no-eaz-worker", "--no-eaz-unpack");
 
 			Assert.True(result.ExitCode == 0, "de4dot exited with " + result.ExitCode);
 			Assert.Contains(result.Output, "delegation is disabled", "de4dot log");
@@ -178,7 +203,7 @@ namespace de4dot.tests {
 			var unpackerDir = CreateStubUnpacker(marker, withWorker: false);
 			var output = NewOutputPath("bridge-incomplete.dll");
 
-			var result = RunDe4dot(input, "-o", output, "--dont-rename", "--eaz-unpacker", unpackerDir);
+			var result = RunDe4dot(input, "-o", output, "--dont-rename", "--no-eaz-worker", "--eaz-unpacker", unpackerDir);
 
 			Assert.True(result.ExitCode == 0, "de4dot exited with " + result.ExitCode);
 			Assert.Contains(result.Output, "Incomplete EazUnpacker", "de4dot log");
@@ -190,7 +215,10 @@ namespace de4dot.tests {
 		/// <summary>命令行选项必须出现在 -h 里（miscOptions 注册丢失是容易犯的错）。</summary>
 		public void HelpListsOptions() {
 			var result = RunDe4dot("-h");
-			foreach (var option in new[] { "--eaz-unpacker", "--eaz-unpack-timeout", "--no-eaz-unpack", "--keep-eaz-temp" })
+			foreach (var option in new[] {
+				"--eaz-worker", "--eaz-worker-path", "--no-eaz-worker",
+				"--eaz-unpacker", "--eaz-unpack-timeout", "--no-eaz-unpack", "--keep-eaz-temp",
+			})
 				Assert.Contains(result.Output, option, "help output");
 		}
 

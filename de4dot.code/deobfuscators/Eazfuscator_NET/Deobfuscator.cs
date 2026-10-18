@@ -54,6 +54,8 @@ namespace de4dot.code.deobfuscators.Eazfuscator_NET {
 		ResourceResolver resourceResolver;
 		ResourceMethodsRestorer resourceMethodsRestorer;
 		ModernEazfuscator modern;
+		/// <summary>内置 worker 恢复出来的 id → 明文；null 表示没走这条路。</summary>
+		Dictionary<int, string> recoveredStrings;
 
 		internal class Options : OptionsBase {
 		}
@@ -120,15 +122,31 @@ namespace de4dot.code.deobfuscators.Eazfuscator_NET {
 				return false;
 			if (modern == null || !modern.Detected)
 				return false;
-			if (!EazUnpackerSettings.Enabled) {
-				Logger.w("Modern Eazfuscator.NET detected but EazUnpacker delegation is disabled (--no-eaz-unpack); falling back to the legacy Eazfuscator.NET deobfuscator.");
-				return false;
-			}
 
 			// 模块的 Location 就是磁盘上的原始文件（AssemblyModule.SetModule 会写入）。
 			var filename = module?.Location;
 			if (string.IsNullOrEmpty(filename) || !File.Exists(filename)) {
-				Logger.w("Can't determine the input file path; skipping EazUnpacker.");
+				Logger.w("Can't determine the input file path; skipping Eazfuscator.NET recovery.");
+				return false;
+			}
+
+			// 首选内置后端：只恢复字符串，不换模块，后面交给 staticStringInliner 内联。
+			// 这样 de4dot 自己的重命名/控制流处理全部照旧，也不需要外部 EazUnpacker。
+			// 这一步独立于 --no-eaz-unpack：即使禁用外部解包器，内置 worker 仍然可用。
+			if (EazWorkerSettings.Enabled) {
+				Dictionary<int, string> strings;
+				string workerError;
+				if (EazWorkerBridge.TryRecoverStrings(filename, out strings, out workerError)) {
+					recoveredStrings = strings;
+					Logger.n("Recovered {0} strings with the built-in Eazfuscator.NET worker.", strings.Count);
+					return false;
+				}
+				Logger.v("Built-in worker didn't recover anything: {0}", workerError);
+			}
+
+			// 内置后端拿不到时，回退到外部 EazUnpacker 解包（需要单独下载/分发）。
+			if (!EazUnpackerSettings.Enabled) {
+				Logger.w("Modern Eazfuscator.NET detected but the built-in worker failed and EazUnpacker delegation is disabled (--no-eaz-unpack); skipping recovery.");
 				return false;
 			}
 
@@ -165,9 +183,29 @@ namespace de4dot.code.deobfuscators.Eazfuscator_NET {
 		/// </summary>
 		bool SkipLegacyRecovery => modern != null && modern.Detected;
 
+		/// <summary>
+		/// 把内置 worker 恢复出来的 id → 明文 表注册给 de4dot 的静态字符串内联器。
+		/// 之后 de4dot 遍历每个方法时，会把 `ldc.i4 &lt;id&gt;; call 解密器` 换成 `ldstr 明文`，
+		/// 不需要我们自己去改 IL。
+		/// </summary>
+		void RegisterBuiltInStringInliner() {
+			var decrypter = modern?.StringDecrypter;
+			if (recoveredStrings == null || decrypter == null)
+				return;
+
+			staticStringInliner.Add(decrypter, (method, gim, args) => {
+				if (args.Length != 1 || !(args[0] is int))
+					return null;
+				string value;
+				return recoveredStrings.TryGetValue((int)args[0], out value) ? value : null;
+			});
+			DeobfuscatedFile.StringDecryptersAdded();
+		}
+
 		public override void DeobfuscateBegin() {
 			base.DeobfuscateBegin();
 			if (SkipLegacyRecovery) {
+				RegisterBuiltInStringInliner();
 				Logger.v("Skipping legacy Eazfuscator.NET recovery: modern version detected and the assembly wasn't unpacked.");
 				return;
 			}

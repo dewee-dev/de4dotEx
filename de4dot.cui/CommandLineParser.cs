@@ -117,6 +117,20 @@ namespace de4dot.cui {
 			miscOptions.Add(new NoArgOption("d", null, "Detect obfuscators and exit", () => {
 				filesOptions.DetectObfuscators = true;
 			}));
+			miscOptions.Add(new NoArgOption(null, "eaz-worker", "Recover modern Eazfuscator.NET strings with the built-in worker (enabled by default)", () => {
+				EazWorkerSettings.Enabled = true;
+			}));
+			miscOptions.Add(new NoArgOption(null, "no-eaz-worker", "Don't use the built-in Eazfuscator.NET worker", () => {
+				EazWorkerSettings.Enabled = false;
+			}));
+			miscOptions.Add(new OneArgOption(null, "eaz-worker-path", "Path to de4dot.eazworker.exe or its directory; defaults to the de4dot directory or PATH", "path", (val) => {
+				EazWorkerSettings.WorkerPath = val;
+			}));
+			miscOptions.Add(new OneArgOption(null, "eaz-worker-timeout", "Built-in worker timeout in seconds (default: 120)", "seconds", (val) => {
+				if (!int.TryParse(val, out int seconds) || seconds <= 0)
+					ExitError($"Invalid timeout: {val}");
+				EazWorkerSettings.TimeoutSeconds = seconds;
+			}));
 			miscOptions.Add(new NoArgOption(null, "eaz-unpack", "Unpack modern Eazfuscator.NET assemblies with EazUnpacker (enabled by default)", () => {
 				EazUnpackerSettings.Enabled = true;
 			}));

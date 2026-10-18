@@ -25,4 +25,27 @@
     <Copy SourceFiles="@(LicenseFiles)" DestinationFolder="$(PublishDir)LICENSES" />
   </Target>
 
+  <!--
+    内置的 Eazfuscator.NET 字符串恢复后端。它必须和 de4dot 同目标框架构建，
+    所以这里显式驱动一次，而不是用 ProjectReference（那会把它的程序集变成
+    de4dot 的编译期依赖）。两个项目都输出到 Release\<tfm>\，构建完就在一起了。
+  -->
+  <Target Name="BuildEazWorker" BeforeTargets="Build">
+    <MSBuild Projects="$(MSBuildThisFileDirectory)..\de4dot.eazworker\de4dot.eazworker.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework)" />
+  </Target>
+
+  <!-- publish 只复制 de4dot 自己的输出，worker 需要单独带过去 -->
+  <Target Name="CopyEazWorker_Publish" AfterTargets="Publish">
+    <ItemGroup>
+      <EazWorkerFiles Include="$(MSBuildThisFileDirectory)..\$(Configuration)\$(TargetFramework)\de4dot.eazworker*"
+                      Exclude="$(MSBuildThisFileDirectory)..\$(Configuration)\$(TargetFramework)\*.pdb" />
+    </ItemGroup>
+    <Warning Text="de4dot.eazworker wasn't found; the published build can't recover modern Eazfuscator.NET strings on its own."
+             Condition="'@(EazWorkerFiles)' == ''" />
+    <Copy SourceFiles="@(EazWorkerFiles)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true"
+          Condition="'@(EazWorkerFiles)' != ''" />
+  </Target>
+
 </Project>

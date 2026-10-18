@@ -71,7 +71,7 @@ Supported obfuscators/packers
 * Dotfuscator
 * .NET Reactor
 * DoubleZero - Merged from https://github.com/gkucherin/de4dot
-* Eazfuscator.NET - 1.x-2.5 built in; 2021.1 and later via the [EazUnpacker bridge](#modern-eazfuscatornet-support-eazunpacker-bridge)
+* Eazfuscator.NET - 1.x-2.5 built in; 2021.1 and later via the [built-in worker](#built-in-eazfuscatornet-worker-no-external-unpacker) (default) or the [EazUnpacker bridge](#modern-eazfuscatornet-support-eazunpacker-bridge)
 * Goliath.NET
 * ILProtector
 * MaxtoCode
@@ -139,6 +139,61 @@ Regression tests live in [`tests/EazfuscatorTests`](tests/EazfuscatorTests/READM
 They build small C# fixtures on the fly (no Eazfuscator, no ilasm) and assert both
 the detection rule and the delegation pipeline, including the fallback paths.
 They run on every CI build.
+
+### Built-in Eazfuscator.NET worker (no external Unpacker)
+
+The EazUnpacker bridge above needs you to download and place a separate
+`Unpacker-net48.exe` next to de4dot. de4dotEx also ships a **built-in worker**
+(`de4dot.eazworker`) that recovers modern Eazfuscator strings *without* that
+external project. It is **enabled by default** and is tried before the EazUnpacker
+bridge; only if it fails does de4dotEx fall back to the bridge (or, if the bridge
+is disabled, to the legacy path).
+
+How it works:
+
+* Modern Eazfuscator's string decrypter inspects its own call stack at runtime
+  (via `StackTrace` / `GetCallingAssembly`). If it sees it was reached through
+  reflection, it returns a decoy string — so the classic "load the assembly and
+  call the decrypter" trick no longer works.
+* The worker therefore never uses reflection. It makes a **copy** of the assembly,
+  injects a tiny probe type (one static helper per distinct string id, plus a `Main`
+  that calls each helper and writes `id <tab> base64(UTF-16LE string)` to stdout),
+  rewrites that copy as a console executable, and **runs it as a separate process**.
+  The call stack is then a clean static chain inside the obfuscated module, so the
+  anti-tamper checks pass and the real strings come out.
+* The recovered `id -> plaintext` map is handed back to de4dot's static string
+  inliner, which rewrites every `ldc.i4 <id>; call decrypter` into `ldstr <text>`.
+  Renaming, control-flow cleanup, etc. then proceed exactly as for the legacy
+  Eazfuscator path.
+
+Because the worker **executes** the target assembly's module initializers in the
+child process, the same sandboxing warning applies as for dynamic string
+decryption: only run it on binaries you trust, or in an isolated environment.
+
+New options (all optional):
+
+| Option | Meaning |
+| --- | --- |
+| `--eaz-worker` | Use the built-in worker (default) |
+| `--no-eaz-worker` | Don't use the built-in worker; go straight to the EazUnpacker bridge |
+| `--eaz-worker-path <path>` | `de4dot.eazworker.exe`, or the directory containing it |
+| `--eaz-worker-timeout <sec>` | Timeout for the probe process (default: 120) |
+
+When `--eaz-worker-path` isn't given, the worker is resolved from the `EAZ_WORKER`
+environment variable, then `eaz-worker\de4dot.eazworker(.exe)` next to de4dot, then
+`de4dot.eazworker(.exe)` next to de4dot, then `PATH`. The `de4dot.eazworker`
+project is built automatically when you build `de4dot` and its output lands next to
+`de4dot.exe`; a `Publish` also copies it into the publish directory.
+
+Example:
+
+```bash
+# Default behaviour: built-in worker first, falls back to EazUnpacker if needed
+de4dot MyApp.exe -o MyApp-cleaned.exe --dont-rename -v
+
+# Force the external bridge and skip the built-in worker
+de4dot MyApp.exe --no-eaz-worker --eaz-unpacker C:\tools\EazUnpacker
+```
 
 Warning
 =======

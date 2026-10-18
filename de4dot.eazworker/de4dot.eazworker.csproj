@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    de4dot.eazworker —— 现代 Eazfuscator.NET 的字符串恢复后端。
+
+    为什么不放进 de4dot.code：它要往样本里注入探针方法、把补丁后的模块当
+    独立进程跑起来，这是"执行样本"的操作，必须和 de4dot 主进程隔离。
+
+    为什么有两个目标框架：TFM 跟着所在的 sln 走（和 De4DotCommon.props 同一套约定）。
+      de4dot.netframework.sln -> net48   （配合 net48 版 de4dot）
+      de4dot.netcore.sln      -> net10.0 （配合 net10 版 de4dot）
+
+    输出目录和 de4dot 一致（..\Release\<tfm>\），所以产物天然和 de4dot.exe 放在一起。
+  -->
+  <PropertyGroup>
+    <TargetFrameworks Condition=" '$(SolutionName)' == 'de4dot.netframework' ">net48</TargetFrameworks>
+    <TargetFrameworks Condition=" '$(TargetFrameworks)' == '' ">net10.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>de4dot.eazworker</AssemblyName>
+    <RootNamespace>de4dot.eazworker</RootNamespace>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <SignAssembly>false</SignAssembly>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <OutputPath>$(MSBuildThisFileDirectory)..\$(Configuration)\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>true</AppendTargetFrameworkToOutputPath>
+    <DnlibVersion>4.5.0</DnlibVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="dnlib" Version="$(DnlibVersion)" />
+  </ItemGroup>
+
+  <ItemGroup Condition=" '$(TargetFramework)' == 'net48' ">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="All" />
+  </ItemGroup>
+
+</Project>
