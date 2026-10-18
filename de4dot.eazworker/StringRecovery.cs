@@ -103,8 +103,7 @@ namespace de4dot.eazworker {
 			error = null;
 
 			ModuleDefMD module = null;
-			string probePath = null;
-			string workDir = Path.GetDirectoryName(input);
+			string workRoot = null;
 			try {
 				module = ModuleDefMD.Load(input);
 
@@ -120,22 +119,35 @@ namespace de4dot.eazworker {
 					return true;
 				}
 
-				var entryPoint = InjectProbe(module, decrypter, ids);
+				var inputDir = Path.GetDirectoryName(input);
+
+				// 探针要作为独立进程跑一次，但样本几乎总会依赖自己目录之外的第三方程序集
+				// （典型例子：Gapotchenko.Eazfuscator.NET.dll 依赖 Gapotchenko.FX）。
+				// 这些依赖必须在探针进程启动之初就能被 CLR 默认探测找到——样本的 <Module>
+				// 模块构造器往往在 Main 之前就加载它们，那时再挂 AssemblyResolve 已经晚了。
+				//
+				// 做法：把探针和依赖树一起放到一个临时目录，平铺复制所有 *.dll，让 CLR 默认
+				// 探测（从 exe 所在目录）就能命中；同时探针里仍然挂了一个 AssemblyResolve
+				// 作为兜底，搜索 inputDir 整棵树，处理那些在 Main 之后才被惰性加载的依赖。
+				workRoot = CreateWorkRoot();
+				var probePath = Path.Combine(workRoot, Path.GetFileNameWithoutExtension(input) + ProbeSuffix + ".exe");
+
+				var entryPoint = InjectProbe(module, decrypter, ids, inputDir);
 
 				// 模块可能是 DLL（没有入口点、PE 头也不允许直接运行）。
 				// 改写时统一成 Console exe，这样 Process.Start 能直接跑起来。
 				module.Kind = ModuleKind.Console;
 				module.EntryPoint = entryPoint;
 
-				probePath = Path.Combine(workDir, Path.GetFileNameWithoutExtension(input) + ProbeSuffix + ".exe");
 				var options = new ModuleWriterOptions(module) { Logger = DummyLogger.NoThrowInstance };
 				using (var fs = File.Create(probePath))
 					module.Write(fs, options);
 
+				CopyDependencyDlls(inputDir, workRoot, input);
 				CopySidecarFiles(input, probePath);
 
 				string stdout, runError;
-				if (!RunProbe(probePath, workDir, timeoutSeconds, out stdout, out runError)) {
+				if (!RunProbe(probePath, workRoot, timeoutSeconds, out stdout, out runError)) {
 					error = runError;
 					return false;
 				}
@@ -183,11 +195,42 @@ namespace de4dot.eazworker {
 				if (module != null)
 					module.Dispose();
 				if (!keep) {
-					TryDelete(probePath);
-					TryDelete(probePath + ".config");
+					TryDeleteTree(workRoot);
 				}
-				else if (probePath != null) {
-					Console.Error.WriteLine("kept probe: " + probePath);
+				else if (workRoot != null) {
+					Console.Error.WriteLine("kept probe dir: " + workRoot);
+				}
+			}
+		}
+
+		/// <summary>为探针单独建一个临时工作目录，避免污染样本所在目录。</summary>
+		static string CreateWorkRoot() {
+			var root = Path.Combine(Path.GetTempPath(), "de4dot-eazworker", Guid.NewGuid().ToString("N"));
+			Directory.CreateDirectory(root);
+			return root;
+		}
+
+		/// <summary>
+		/// 把样本目录树里的所有 *.dll 平铺复制到探针目录（跳过样本本身）。
+		/// 这样 CLR 默认探测就能在探针进程启动时找到第三方依赖，
+		/// 而不必等 Main 里的 AssemblyResolve 注册（那时 &lt;Module&gt; 构造器可能已经崩了）。
+		/// </summary>
+		static void CopyDependencyDlls(string inputDir, string workRoot, string inputFile) {
+			if (string.IsNullOrEmpty(inputDir) || !Directory.Exists(inputDir))
+				return;
+			var inputFullName = Path.GetFullPath(inputFile);
+			foreach (var dll in Directory.EnumerateFiles(inputDir, "*.dll", SearchOption.AllDirectories)) {
+				var full = Path.GetFullPath(dll);
+				if (string.Equals(full, inputFullName, StringComparison.OrdinalIgnoreCase))
+					continue;
+				var dest = Path.Combine(workRoot, Path.GetFileName(dll));
+				try {
+					if (!File.Exists(dest))
+						File.Copy(full, dest, false);
+				}
+				catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) {
+					// 复制失败不致命：这个依赖可能根本用不到，或在别处能被解析到
+					Console.Error.WriteLine("warning: can't copy dependency " + dll + ": " + ex.Message);
 				}
 			}
 		}
@@ -260,8 +303,13 @@ namespace de4dot.eazworker {
 		/// <summary>
 		/// 注入探针类型：每个 id 一个 helper + 一个按顺序调用并写结果的 Main。
 		/// 每个调用单独 try/catch，单个字符串失败不影响后面的。
+		///
+		/// 另外挂一个 AppDomain.AssemblyResolve：样本经常依赖它自己目录之外的第三方程序集
+		/// （例如 Gapotchenko.Eazfuscator.NET.dll 依赖 Gapotchenko.FX），探针被改名复制到别处后，
+		/// .NET 默认探测找不到这些依赖，模块初始化就抛 FileNotFoundException。解析器从输入目录
+		/// 树里递归补加载，让样本能正常执行、字符串能正常解密。
 		/// </summary>
-		static MethodDef InjectProbe(ModuleDef module, MethodDef decrypter, List<int> ids) {
+		static MethodDef InjectProbe(ModuleDef module, MethodDef decrypter, List<int> ids, string workDir) {
 			var probe = new TypeDefUser(UniqueTypeName(module, "De4dotEazProbe"), module.CorLibTypes.Object.TypeDefOrRef);
 			probe.Attributes = TypeAttributes.NotPublic | TypeAttributes.Abstract |
 				TypeAttributes.Sealed | TypeAttributes.BeforeFieldInit;
@@ -270,9 +318,19 @@ namespace de4dot.eazworker {
 			var api = ProbeApi.Create(module);
 			var exception = new TypeRefUser(module, "System", "Exception", module.CorLibTypes.AssemblyRef);
 
+			// 解析器读取的根目录（探针所在的输入目录），运行时递归找依赖。
+			var depRoot = new FieldDefUser("<>DepRoot", new FieldSig(module.CorLibTypes.String),
+				FieldAttributes.Private | FieldAttributes.Static);
+			probe.Fields.Add(depRoot);
+
+			var resolve = BuildResolver(api, depRoot, exception);
+			probe.Methods.Add(resolve);
+
 			var main = new MethodDefUser("Main", MethodSig.CreateStatic(module.CorLibTypes.Void),
 				MethodAttributes.Static | MethodAttributes.Assembly | MethodAttributes.HideBySig);
 			main.Body = new CilBody { MaxStack = 8 };
+
+			EmitRegisterResolver(main.Body, api, resolve, depRoot, workDir);
 
 			foreach (var id in ids) {
 				var helper = new MethodDefUser("S" + probe.Methods.Count,
@@ -290,6 +348,91 @@ namespace de4dot.eazworker {
 			main.Body.Instructions.Add(OpCodes.Ret.ToInstruction());
 			probe.Methods.Add(main);
 			return main;
+		}
+
+		/// <summary>
+		/// 构造 AssemblyResolve 处理方法：从 DepRoot 目录树递归找同名 .dll 并 LoadFrom。
+		/// 整段 try/catch，任何异常都回退到 null（交给默认探测/GAC），不会让模块初始化崩掉。
+		/// </summary>
+		static MethodDef BuildResolver(ProbeApi api, FieldDef depRoot, ITypeDefOrRef exception) {
+			var module = depRoot.DeclaringType.Module;
+			var sig = MethodSig.CreateStatic(api.Assembly, module.CorLibTypes.Object, api.ResolveEventArgs);
+			var m = new MethodDefUser("<>Resolve", sig,
+				MethodAttributes.Static | MethodAttributes.Assembly | MethodAttributes.HideBySig);
+			m.Body = new CilBody { MaxStack = 4 };
+			m.Body.Variables.Add(new Local(module.CorLibTypes.String));
+			m.Body.Variables.Add(new Local(module.CorLibTypes.Int32));
+			m.Body.Variables.Add(new Local(new SZArraySig(module.CorLibTypes.String)));
+
+			var instr = m.Body.Instructions;
+			var lNoSub = Instruction.Create(OpCodes.Nop);
+			var lNull = Instruction.Create(OpCodes.Ldnull);
+			var endMarker = Instruction.Create(OpCodes.Nop);
+
+			// name = e.Name; 去掉版本/文化等后缀（第一个逗号之前的部分）
+			instr.Add(Instruction.Create(OpCodes.Ldarg_1));
+			instr.Add(Instruction.Create(OpCodes.Call, api.ResolveEventArgsGetName));
+			instr.Add(Instruction.Create(OpCodes.Stloc_0));
+			instr.Add(Instruction.Create(OpCodes.Ldloc_0));
+			instr.Add(Instruction.Create(OpCodes.Ldstr, ","));
+			instr.Add(Instruction.Create(OpCodes.Call, api.StringIndexOf));
+			instr.Add(Instruction.Create(OpCodes.Stloc_1));
+			instr.Add(Instruction.Create(OpCodes.Ldloc_1));
+			instr.Add(Instruction.Create(OpCodes.Ldc_I4_0));
+			instr.Add(Instruction.Create(OpCodes.Blt_S, lNoSub));
+			instr.Add(Instruction.Create(OpCodes.Ldloc_0));
+			instr.Add(Instruction.Create(OpCodes.Ldc_I4_0));
+			instr.Add(Instruction.Create(OpCodes.Ldloc_1));
+			instr.Add(Instruction.Create(OpCodes.Call, api.StringSubstring));
+			instr.Add(Instruction.Create(OpCodes.Stloc_0));
+			// files = Directory.GetFiles(DepRoot, name + ".dll", AllDirectories)
+			instr.Add(lNoSub);
+			instr.Add(Instruction.Create(OpCodes.Ldsfld, depRoot));
+			instr.Add(Instruction.Create(OpCodes.Ldloc_0));
+			instr.Add(Instruction.Create(OpCodes.Ldstr, ".dll"));
+			instr.Add(Instruction.Create(OpCodes.Call, api.Concat));
+			instr.Add(Instruction.Create(OpCodes.Ldc_I4_1));
+			instr.Add(Instruction.Create(OpCodes.Call, api.DirectoryGetFiles));
+			instr.Add(Instruction.Create(OpCodes.Stloc_2));
+			// files == null 或长度为 0 -> 返回 null
+			instr.Add(Instruction.Create(OpCodes.Ldloc_2));
+			instr.Add(Instruction.Create(OpCodes.Brfalse_S, lNull));
+			instr.Add(Instruction.Create(OpCodes.Ldloc_2));
+			instr.Add(Instruction.Create(OpCodes.Ldlen));
+			instr.Add(Instruction.Create(OpCodes.Ldc_I4_0));
+			instr.Add(Instruction.Create(OpCodes.Ble_S, lNull));
+			// return Assembly.LoadFrom(files[0])
+			instr.Add(Instruction.Create(OpCodes.Ldloc_2));
+			instr.Add(Instruction.Create(OpCodes.Ldc_I4_0));
+			instr.Add(Instruction.Create(OpCodes.Ldelem_Ref));
+			instr.Add(Instruction.Create(OpCodes.Call, api.AssemblyLoadFrom));
+			instr.Add(Instruction.Create(OpCodes.Ret));
+			// catch: return null
+			instr.Add(lNull);
+			instr.Add(Instruction.Create(OpCodes.Ret));
+			instr.Add(endMarker);
+
+			m.Body.ExceptionHandlers.Add(new ExceptionHandler {
+				HandlerType = ExceptionHandlerType.Catch,
+				CatchType = exception,
+				TryStart = instr[0],
+				TryEnd = lNull,
+				HandlerStart = lNull,
+				HandlerEnd = endMarker,
+			});
+
+			return m;
+		}
+
+		/// <summary>在 Main 开头设置 DepRoot 并挂上 AssemblyResolve。</summary>
+		static void EmitRegisterResolver(CilBody body, ProbeApi api, MethodDef resolve, FieldDef depRoot, string workDir) {
+			body.Instructions.Add(Instruction.Create(OpCodes.Ldstr, workDir));
+			body.Instructions.Add(Instruction.Create(OpCodes.Stsfld, depRoot));
+			body.Instructions.Add(Instruction.Create(OpCodes.Call, api.AppDomainGetCurrentDomain));
+			body.Instructions.Add(Instruction.Create(OpCodes.Ldnull));
+			body.Instructions.Add(Instruction.Create(OpCodes.Ldftn, resolve));
+			body.Instructions.Add(Instruction.Create(OpCodes.Newobj, api.ResolveEventHandlerCtor));
+			body.Instructions.Add(Instruction.Create(OpCodes.Call, api.AppDomainAddAssemblyResolve));
 		}
 
 		static void EmitProbeCall(CilBody body, ProbeApi api, MethodDef helper, int id, ITypeDefOrRef exception) {
@@ -428,12 +571,12 @@ namespace de4dot.eazworker {
 			}
 		}
 
-		static void TryDelete(string path) {
+		static void TryDeleteTree(string path) {
 			if (path == null)
 				return;
 			try {
-				if (File.Exists(path))
-					File.Delete(path);
+				if (Directory.Exists(path))
+					Directory.Delete(path, true);
 			}
 			catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) {
 				Console.Error.WriteLine("warning: can't delete " + path + ": " + ex.Message);

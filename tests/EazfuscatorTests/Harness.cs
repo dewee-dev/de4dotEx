@@ -152,6 +152,41 @@ namespace de4dot.tests {
 				"output should contain the inlined string for id 1002");
 		}
 
+		/// <summary>
+		/// 内置 worker + 外部依赖：样本引用了不在同目录的第三方程序集（DepLibrary 被放进子目录）。
+		/// 内置 worker 必须把依赖树平铺复制到探针目录（默认 CLR 探测即可命中），
+		/// 否则解密器一调用依赖就 FileNotFoundException，字符串恢复为 0。
+		/// 这条路径不需要外部 EazUnpacker。
+		/// </summary>
+		public void WorkerRecoversStringsWithDependency() {
+			RequireWindows();
+
+			var depSampleDir = BuildFixture("DepSample");
+			var depSample = Path.Combine(depSampleDir, "DepSample.dll");
+			Assert.True(File.Exists(depSample), "DepSample not built: " + depSample);
+
+			// 把样本拷到一个临时舞台目录，并把依赖挪到子目录（不在主 dll 同目录），
+			// 模拟真实样本"依赖散落在子目录/其他位置"的情况。
+			var stage = NewOutputDir("depsample");
+			File.Copy(depSample, Path.Combine(stage, "DepSample.dll"), true);
+			var libSource = Path.Combine(depSampleDir, "DepLibrary.dll");
+			Assert.True(File.Exists(libSource), "DepLibrary not built next to DepSample: " + libSource);
+			var extDir = Path.Combine(stage, "ext");
+			Directory.CreateDirectory(extDir);
+			File.Copy(libSource, Path.Combine(extDir, "DepLibrary.dll"), true);
+
+			var output = Path.Combine(stage, "out.dll");
+			var result = RunDe4dot(Path.Combine(stage, "DepSample.dll"), "-o", output, "--dont-rename");
+
+			Assert.True(result.ExitCode == 0, "de4dot exited with " + result.ExitCode);
+			Assert.Contains(result.Output, "Recovered 2 strings with the built-in", "de4dot log");
+			Assert.True(File.Exists(output), "de4dot didn't write " + output);
+			Assert.True(Assert.FileContainsText(output, "DEP_MARKER_42_2001"),
+				"output should contain the inlined string for id 2001 (dependency was loaded)");
+			Assert.True(Assert.FileContainsText(output, "DEP_MARKER_42_2002"),
+				"output should contain the inlined string for id 2002 (dependency was loaded)");
+		}
+
 		/// <summary>委托链路：解包器交出的程序集必须真的替换掉原始模块。</summary>
 		public void BridgeReplacesModule() {
 			RequireWindows();
@@ -287,6 +322,13 @@ namespace de4dot.tests {
 			var dir = Path.Combine(workDir, "out");
 			Directory.CreateDirectory(dir);
 			return Path.Combine(dir, fileName);
+		}
+
+		/// <summary>返回一个全新的临时子目录（用于把样本和依赖重新摆位）。</summary>
+		string NewOutputDir(string dirName) {
+			var dir = Path.Combine(workDir, "stages", dirName);
+			Directory.CreateDirectory(dir);
+			return dir;
 		}
 
 		static void RequireWindows() {

@@ -170,6 +170,16 @@ Because the worker **executes** the target assembly's module initializers in the
 child process, the same sandboxing warning applies as for dynamic string
 decryption: only run it on binaries you trust, or in an isolated environment.
 
+The probe is written to a throwaway temp directory together with a **flattened
+copy of every `*.dll` found under the input file's directory tree**. This is
+deliberate: the obfuscated module's `<Module>` initializer often loads third-party
+dependencies (e.g. `Gapotchenko.Eazfuscator.NET.dll` needs `Gapotchenko.FX.dll`)
+*before* any managed code of our own can run, so those dependencies must already
+be resolvable by the CLR's default probing when the probe starts. If a required
+dependency is genuinely absent from disk (not merely in a subfolder), the probe
+still can't run and the worker reports the failure instead of silently falling
+back to the EazUnpacker bridge.
+
 New options (all optional):
 
 | Option | Meaning |

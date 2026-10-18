@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    回归夹具：引用了外部依赖 DepLibrary 的现代 Eazfuscator.NET 解密器形状（正例）。
+    用来回归"样本带了不在同目录的第三方依赖"时，内置 worker 仍能恢复字符串。
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>DepSample</AssemblyName>
+    <RootNamespace>DepSampleFixture</RootNamespace>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <SignAssembly>false</SignAssembly>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DepLibrary\DepLibrary.csproj" />
+  </ItemGroup>
+
+</Project>

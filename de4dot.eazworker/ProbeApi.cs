@@ -18,6 +18,7 @@
 */
 
 using System;
+using System.Reflection;
 using System.Text;
 using dnlib.DotNet;
 
@@ -41,6 +42,26 @@ namespace de4dot.eazworker {
 		public IMethod ToBase64String;
 		/// <summary>static string System.String::Concat(string, string)</summary>
 		public IMethod Concat;
+		/// <summary>instance int32 System.String::IndexOf(string)</summary>
+		public IMethod StringIndexOf;
+		/// <summary>instance string System.String::Substring(int32, int32)</summary>
+		public IMethod StringSubstring;
+		/// <summary>static string[] System.IO.Directory::GetFiles(string, string, System.IO.SearchOption)</summary>
+		public IMethod DirectoryGetFiles;
+		/// <summary>static System.Reflection.Assembly System.Reflection.Assembly::LoadFrom(string)</summary>
+		public IMethod AssemblyLoadFrom;
+		/// <summary>instance string System.Reflection.ResolveEventArgs::get_Name()</summary>
+		public IMethod ResolveEventArgsGetName;
+		/// <summary>static System.AppDomain System.AppDomain::get_CurrentDomain()</summary>
+		public IMethod AppDomainGetCurrentDomain;
+		/// <summary>instance void System.AppDomain::add_AssemblyResolve(System.ResolveEventHandler)</summary>
+		public IMethod AppDomainAddAssemblyResolve;
+		/// <summary>instance void System.ResolveEventHandler::.ctor(object, intptr)</summary>
+		public IMethod ResolveEventHandlerCtor;
+		/// <summary>System.Reflection.Assembly 的 TypeSig（用作解析方法的返回类型）。</summary>
+		public TypeSig Assembly;
+		/// <summary>System.Reflection.ResolveEventArgs 的 TypeSig（用作解析方法的参数类型）。</summary>
+		public TypeSig ResolveEventArgs;
 
 		public static ProbeApi Create(ModuleDef module) {
 			var corlib = module.CorLibTypes.AssemblyRef;
@@ -54,11 +75,18 @@ namespace de4dot.eazworker {
 			var stringSig = module.CorLibTypes.String;
 			var voidSig = module.CorLibTypes.Void;
 			var byteArraySig = new SZArraySig(module.CorLibTypes.Byte);
+			var stringArraySig = new SZArraySig(stringSig);
 
 			var console = new TypeRefUser(module, "System", "Console", corlib);
 			var encoding = new TypeRefUser(module, "System.Text", "Encoding", corlib);
 			var convert = new TypeRefUser(module, "System", "Convert", corlib);
 			var stringType = module.CorLibTypes.String.ToTypeDefOrRef();
+			var directory = new TypeRefUser(module, "System.IO", "Directory", corlib);
+			var searchOption = new TypeRefUser(module, "System.IO", "SearchOption", corlib);
+			var assembly = new TypeRefUser(module, "System.Reflection", "Assembly", corlib);
+			var resolveEventArgs = new TypeRefUser(module, "System.Reflection", "ResolveEventArgs", corlib);
+			var appDomain = new TypeRefUser(module, "System", "AppDomain", corlib);
+			var resolveEventHandler = new TypeRefUser(module, "System", "ResolveEventHandler", corlib);
 
 			return new ProbeApi {
 				WriteLine = new MemberRefUser(module, "WriteLine",
@@ -71,6 +99,24 @@ namespace de4dot.eazworker {
 					MethodSig.CreateStatic(stringSig, byteArraySig), convert),
 				Concat = new MemberRefUser(module, "Concat",
 					MethodSig.CreateStatic(stringSig, stringSig, stringSig), stringType),
+				StringIndexOf = new MemberRefUser(module, "IndexOf",
+					MethodSig.CreateInstance(module.CorLibTypes.Int32, stringSig), stringType),
+				StringSubstring = new MemberRefUser(module, "Substring",
+					MethodSig.CreateInstance(stringSig, module.CorLibTypes.Int32, module.CorLibTypes.Int32), stringType),
+				DirectoryGetFiles = new MemberRefUser(module, "GetFiles",
+					MethodSig.CreateStatic(stringArraySig, stringSig, stringSig, searchOption.ToTypeSig()), directory),
+				AssemblyLoadFrom = new MemberRefUser(module, "LoadFrom",
+					MethodSig.CreateStatic(assembly.ToTypeSig(), stringSig), assembly),
+				ResolveEventArgsGetName = new MemberRefUser(module, "get_Name",
+					MethodSig.CreateInstance(stringSig), resolveEventArgs),
+				AppDomainGetCurrentDomain = new MemberRefUser(module, "get_CurrentDomain",
+					MethodSig.CreateStatic(appDomain.ToTypeSig()), appDomain),
+				AppDomainAddAssemblyResolve = new MemberRefUser(module, "add_AssemblyResolve",
+					MethodSig.CreateInstance(voidSig, resolveEventHandler.ToTypeSig()), appDomain),
+				ResolveEventHandlerCtor = new MemberRefUser(module, ".ctor",
+					MethodSig.CreateInstance(voidSig, module.CorLibTypes.Object, module.CorLibTypes.IntPtr), resolveEventHandler),
+				Assembly = assembly.ToTypeSig(),
+				ResolveEventArgs = resolveEventArgs.ToTypeSig(),
 			};
 		}
 
@@ -81,6 +127,16 @@ namespace de4dot.eazworker {
 				GetBytes = module.Import(typeof(Encoding).GetMethod("GetBytes", new[] { typeof(string) })),
 				ToBase64String = module.Import(typeof(Convert).GetMethod("ToBase64String", new[] { typeof(byte[]) })),
 				Concat = module.Import(typeof(string).GetMethod("Concat", new[] { typeof(string), typeof(string) })),
+				StringIndexOf = module.Import(typeof(string).GetMethod("IndexOf", new[] { typeof(string) })),
+				StringSubstring = module.Import(typeof(string).GetMethod("Substring", new[] { typeof(int), typeof(int) })),
+				DirectoryGetFiles = module.Import(typeof(System.IO.Directory).GetMethod("GetFiles", new[] { typeof(string), typeof(string), typeof(System.IO.SearchOption) })),
+				AssemblyLoadFrom = module.Import(typeof(Assembly).GetMethod("LoadFrom", new[] { typeof(string) })),
+				ResolveEventArgsGetName = module.Import(typeof(ResolveEventArgs).GetProperty("Name").GetGetMethod()),
+				AppDomainGetCurrentDomain = module.Import(typeof(AppDomain).GetProperty("CurrentDomain").GetGetMethod()),
+				AppDomainAddAssemblyResolve = module.Import(typeof(AppDomain).GetEvent("AssemblyResolve").GetAddMethod()),
+				ResolveEventHandlerCtor = module.Import(typeof(ResolveEventHandler).GetConstructor(new[] { typeof(object), typeof(IntPtr) })),
+				Assembly = module.Import(typeof(Assembly)).ToTypeSig(),
+				ResolveEventArgs = module.Import(typeof(ResolveEventArgs)).ToTypeSig(),
 			};
 		}
 	}
