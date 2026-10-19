@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    回归夹具：2026.2 风格字符串解密器（只有 string(int)，不调用 string(int,bool)）。
+    额外的 Eazfuscator.NET 嵌入资源用来触发现代识别。
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>RelaxedDecrypter</AssemblyName>
+    <RootNamespace>RelaxedDecrypterFixture</RootNamespace>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <SignAssembly>false</SignAssembly>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="eaz-marker.txt" LogicalName="Eazfuscator.NET" />
+  </ItemGroup>
+
+</Project>

@@ -29,7 +29,17 @@ namespace de4dot.code.deobfuscators.Eazfuscator_NET {
 	public class DeobfuscatorInfo : DeobfuscatorInfoBase {
 		public const string THE_NAME = "Eazfuscator.NET";
 		public const string THE_TYPE = "ef";
-		const string DEFAULT_REGEX = @"!^[a-zA-Z]$&!^#=&!^dje_.+_ejd$&" + DeobfuscatorBase.DEFAULT_ASIAN_VALID_NAME_REGEX;
+		// 现代 Eazfuscator（2021+）会把符号命名成 u0006_u2004_u200B 这种"看起来像
+		// Unicode 转义、实际全是 ASCII"的名字，或者夹带零宽字符。它们都是合法的 C#
+		// 标识符，能通过 DEFAULT_ASIAN_VALID_NAME_REGEX，于是被当成"正常名字"保留下来，
+		// 反编译结果里就还是 u0006_u2004_u200B 这种噪音。这里显式把它们判为非法，
+		// 交给 renamer 改名。规则放在 asian 正则之前——NameRegexes.IsMatch 返回第一个
+		// 命中的规则，顺序决定优先级。
+		const string EAZ_LOOKALIKE_NAMES =
+			@"!^u[0-9a-fA-F]{4}(_[uU]?[0-9a-fA-F]{4})*$" + "&" +
+			@"!.*[\u200B-\u200D\uFEFF\u00AD].*";
+		const string DEFAULT_REGEX = @"!^[a-zA-Z]$&!^#=&!^dje_.+_ejd$&" +
+			EAZ_LOOKALIKE_NAMES + "&" + DeobfuscatorBase.DEFAULT_ASIAN_VALID_NAME_REGEX;
 		public DeobfuscatorInfo()
 			: base(DEFAULT_REGEX) {
 		}

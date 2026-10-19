@@ -154,6 +154,7 @@ namespace de4dot.tests {
 				harness.Add("lookalike-not-detected", harness.LookalikeNotDetected);
 				harness.Add("worker-recovers-strings", harness.WorkerRecoversStrings);
 				harness.Add("worker-recovers-strings-with-dependency", harness.WorkerRecoversStringsWithDependency);
+				harness.Add("worker-recovers-strings-relaxed-decrypter", harness.WorkerRecoversStringsRelaxedDecrypter);
 				harness.Add("bridge-replaces-module", harness.BridgeReplacesModule);
 				harness.Add("bridge-disabled-falls-back", harness.BridgeDisabledFallsBack);
 				harness.Add("bridge-incomplete-unpacker-falls-back", harness.BridgeIncompleteUnpackerFallsBack);

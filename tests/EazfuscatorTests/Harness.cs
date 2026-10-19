@@ -187,6 +187,27 @@ namespace de4dot.tests {
 				"output should contain the inlined string for id 2002 (dependency was loaded)");
 		}
 
+		/// <summary>
+		/// 2026.2 兼容：解密器只有 string(int)、不调用 string(int,bool) 时，
+		/// 现代识别与内置 worker 仍应认出它并恢复字符串。
+		/// </summary>
+		public void WorkerRecoversStringsRelaxedDecrypter() {
+			RequireWindows();
+
+			var input = FixtureAssembly("RelaxedDecrypter");
+			var output = NewOutputPath("relaxed-strings.dll");
+
+			var result = RunDe4dot(input, "-o", output, "--dont-rename");
+
+			Assert.True(result.ExitCode == 0, "de4dot exited with " + result.ExitCode);
+			Assert.Contains(result.Output, "Recovered 2 strings with the built-in", "de4dot log");
+			Assert.True(File.Exists(output), "de4dot didn't write " + output);
+			Assert.True(Assert.FileContainsText(output, "RELAXED_3001"),
+				"output should contain the inlined string for id 3001 (plain string(int) decrypter)");
+			Assert.True(Assert.FileContainsText(output, "RELAXED_3002"),
+				"output should contain the inlined string for id 3002 (plain string(int) decrypter)");
+		}
+
 		/// <summary>委托链路：解包器交出的程序集必须真的替换掉原始模块。</summary>
 		public void BridgeReplacesModule() {
 			RequireWindows();

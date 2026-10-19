@@ -53,23 +53,40 @@ namespace de4dot.code.deobfuscators.Eazfuscator_NET {
 			if (module == null)
 				return;
 
-			var decrypter = FindStringDecrypter(module);
-			if (decrypter != null) {
+			bool hasAttr = HasEazfuscatorAttribute(module);
+			bool hasResource = HasEazfuscatorResource(module);
+			bool hasLegacy = HasLegacyNamePattern(module);
+
+			// 先找 2021–2025 的典型形状：internal static string(int)，且方法体调用
+			// 同模块的 string(int,bool)。找不到时退化为任意 internal static string(int)，
+			// 兼容 2026.2 这类把重载内联/改写掉的版本。退化分支单独出现的置信度不够，
+			// 必须有别的 Eazfuscator 证据才计入判定，避免把普通程序集误认成 Eazfuscator。
+			var decrypter = FindStringDecrypter(module, requireIntBool: true);
+			bool strict = decrypter != null;
+			if (!strict)
+				decrypter = FindStringDecrypter(module, requireIntBool: false);
+
+			if (strict) {
 				stringDecrypter = decrypter;
 				score += PrimaryScore;
 				evidence = $"string decrypter {decrypter.FullName} calls string(int,bool)";
 			}
+			else if (decrypter != null && (hasAttr || hasResource || hasLegacy)) {
+				stringDecrypter = decrypter;
+				score += 50;
+				evidence = $"string decrypter {decrypter.FullName} (string(int) shape, no int/bool overload)";
+			}
 
 			// 以下只作为佐证提高置信度，单独出现不足以判定。
-			if (HasEazfuscatorAttribute(module)) {
+			if (hasAttr) {
 				score += 40;
 				evidence = Append(evidence, "Eazfuscator custom attribute");
 			}
-			if (HasEazfuscatorResource(module)) {
+			if (hasResource) {
 				score += 20;
 				evidence = Append(evidence, "Eazfuscator resource");
 			}
-			if (HasLegacyNamePattern(module)) {
+			if (hasLegacy) {
 				score += 10;
 				evidence = Append(evidence, "dje_*_ejd names");
 			}
@@ -78,8 +95,11 @@ namespace de4dot.code.deobfuscators.Eazfuscator_NET {
 		static string Append(string text, string item) =>
 			text == null ? item : text + "; " + item;
 
-		/// <summary>internal static string(int)，且方法体调用 string(int,bool)。</summary>
-		static MethodDef FindStringDecrypter(ModuleDefMD module) {
+		/// <summary>
+		/// internal static string(int)。<paramref name="requireIntBool"/> 为 true 时还要求
+		/// 方法体调用 string(int,bool)；为 false 时只按签名匹配。
+		/// </summary>
+		static MethodDef FindStringDecrypter(ModuleDefMD module, bool requireIntBool) {
 			foreach (var type in module.GetTypes()) {
 				foreach (var method in type.Methods) {
 					if (!method.IsStatic || !method.IsAssembly)
@@ -88,7 +108,7 @@ namespace de4dot.code.deobfuscators.Eazfuscator_NET {
 						continue;
 					if (!IsIntToString(method.MethodSig))
 						continue;
-					if (!CallsIntBoolToString(method))
+					if (requireIntBool && !CallsIntBoolToString(method))
 						continue;
 					return method;
 				}

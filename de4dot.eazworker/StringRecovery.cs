@@ -112,10 +112,14 @@ namespace de4dot.eazworker {
 					error = "no modern Eazfuscator.NET string decrypter found";
 					return false;
 				}
+				Console.WriteLine("decrypter: " + decrypter.FullName +
+					(CallsIntBoolToString(decrypter) ? " (calls string(int,bool))" : " (plain string(int))"));
 
 				var ids = CollectStringIds(module, decrypter);
+				Console.WriteLine("call sites: " + ids.Count);
 				if (ids.Count == 0) {
 					// 没有调用点，没什么可恢复的；当作成功，输出空表。
+					Console.WriteLine("warning: the decrypter has no ldc.i4+call call sites; nothing to recover");
 					return true;
 				}
 
@@ -236,10 +240,13 @@ namespace de4dot.eazworker {
 		}
 
 		/// <summary>
-		/// 现代 Eazfuscator 的解密器：internal static string(int)，方法体调用同模块的
-		/// string(int,bool)。和 de4dot 侧 ModernEazfuscator 的判定规则保持一致。
+		/// 现代 Eazfuscator 的解密器：internal static string(int)。优先选方法体调用
+		/// string(int,bool) 的那个（2021–2025 的典型形状），找不到时退回任意
+		/// internal static string(int)，兼容 2026.2 这类把重载内联/改写掉的版本。
+		/// 选择顺序必须和 de4dot 侧 ModernEazfuscator 完全一致，否则内联会匹配不上调用点。
 		/// </summary>
 		static MethodDef FindDecrypter(ModuleDef module) {
+			MethodDef fallback = null;
 			foreach (var type in module.GetTypes()) {
 				foreach (var method in type.Methods) {
 					if (!method.IsStatic || !method.IsAssembly)
@@ -248,12 +255,13 @@ namespace de4dot.eazworker {
 						continue;
 					if (!IsIntToString(method.MethodSig))
 						continue;
-					if (!CallsIntBoolToString(method))
-						continue;
-					return method;
+					if (CallsIntBoolToString(method))
+						return method;
+					if (fallback == null)
+						fallback = method;
 				}
 			}
-			return null;
+			return fallback;
 		}
 
 		static bool IsIntToString(MethodSig sig) =>
@@ -277,7 +285,7 @@ namespace de4dot.eazworker {
 			return false;
 		}
 
-		/// <summary>所有 ldc.i4 &lt;id&gt; 紧跟 call 解密器 的调用点参数（去重、保序）。</summary>
+		/// <summary>所有 ldc.i4 &lt;id&gt; 后跟 call 解密器 的调用点参数（去重、保序）。</summary>
 		static List<int> CollectStringIds(ModuleDef module, MethodDef decrypter) {
 			var ids = new List<int>();
 			var seen = new HashSet<int>();
@@ -286,18 +294,46 @@ namespace de4dot.eazworker {
 					if (!method.HasBody || !method.Body.HasInstructions)
 						continue;
 					var instrs = method.Body.Instructions;
-					for (int i = 1; i < instrs.Count; i++) {
-						if (!instrs[i - 1].IsLdcI4())
+					for (int i = 0; i < instrs.Count; i++) {
+						var opCode = instrs[i].OpCode.Code;
+						if (opCode != Code.Call && opCode != Code.Callvirt)
 							continue;
 						if (!(instrs[i].Operand is IMethod called) || called.FullName != decrypter.FullName)
 							continue;
-						int id = instrs[i - 1].GetLdcI4Value();
+						int id;
+						if (!TryGetPushedInt32(instrs, i, out id))
+							continue;
 						if (seen.Add(id))
 							ids.Add(id);
 					}
 				}
 			}
 			return ids;
+		}
+
+		/// <summary>
+		/// 找 call 之前压栈的 ldc.i4。标准形状是紧邻，但有些版本会插入 nop/conv.i4，
+		/// 所以向前看最多 4 条，跳过不影响整数值的指令。
+		/// </summary>
+		static bool TryGetPushedInt32(IList<Instruction> instrs, int callIndex, out int value) {
+			value = 0;
+			for (int i = callIndex - 1, steps = 0; i >= 0 && steps < 4; i--, steps++) {
+				var instr = instrs[i];
+				if (instr.IsLdcI4()) {
+					value = instr.GetLdcI4Value();
+					return true;
+				}
+				switch (instr.OpCode.Code) {
+					case Code.Nop:
+					case Code.Conv_I4:
+					case Code.Conv_U4:
+					case Code.Conv_I8:
+						continue;
+					default:
+						return false;
+				}
+			}
+			return false;
 		}
 
 		/// <summary>

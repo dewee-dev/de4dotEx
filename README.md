@@ -180,6 +180,19 @@ dependency is genuinely absent from disk (not merely in a subfolder), the probe
 still can't run and the worker reports the failure instead of silently falling
 back to the EazUnpacker bridge.
 
+Eazfuscator.NET 2026.2 changed the decrypter shape slightly: some builds inline or
+rewrite the `string(int,bool)` overload, leaving just `internal static string(int)`.
+Both the modern detector and the worker now accept that shape as a fallback, so the
+2026.2 decrypter is still recognised and its strings are recovered. The fallback only
+counts when other Eazfuscator evidence is present (an Eazfuscator attribute, resource,
+or legacy `dje_*_ejd` names), so ordinary assemblies aren't misdetected.
+
+Symbol names are handled too. Eazfuscator 2021+ names members like
+`u0006_u2004_u200B` — ASCII text that only *looks* like a Unicode escape — or embeds
+zero-width characters. Those are valid C# identifiers, so they used to survive the
+renamer and leak into the decompiled output. The Eazfuscator name checker now treats
+both patterns as invalid, so they become `method_0`, `GClass0`, and so on.
+
 New options (all optional):
 
 | Option | Meaning |
