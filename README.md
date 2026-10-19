@@ -18,6 +18,11 @@ Binaries
 
 Get binaries from the build server [![](https://github.com/GDATAAdvancedAnalytics/de4dotEx/workflows/CI%20build/badge.svg)](https://github.com/GDATAAdvancedAnalytics/de4dotEx/actions).
 
+Packaged builds are published to [Releases](https://github.com/dewee-dev/de4dotEx/releases).
+Pushing a tag (`git tag v3.11.0 && git push origin v3.11.0`) or running the *CI Build* workflow
+manually builds every target and attaches the zips to a GitHub release. Locally,
+`.\build.ps1 -Publish` does the same through `gh` (add `-Tag v3.11.0` to pin the version).
+
 Docker & MCP Server Support
 ===========================
 
