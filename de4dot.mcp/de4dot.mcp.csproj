@@ -4,6 +4,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
     <!-- Force it to build for .NET 8.0+ since MCP/Minimal APIs require .NET 8 capabilities -->
     <TargetFrameworks>net10.0</TargetFrameworks>
   </PropertyGroup>

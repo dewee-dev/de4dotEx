@@ -12,7 +12,8 @@ if [ $# -lt 1 ]; then
     echo ""
     echo "Examples:"
     echo "  $0 MyProtectedApp.dll"
-    echo "  $0 /path/to/Target.exe \"--preserve-tokens -str delegate\""
+    echo "  $0 /path/to/Target.exe \"--preserve-tokens\""
+    echo "Set DE4DOT_API_TOKEN if the server requires a token."
     echo "=========================================================================="
     exit 1
 fi
@@ -39,16 +40,20 @@ else
     OUTPUT_FILE="${DIR}/${BASENAME}_cleaned.${EXTENSION}"
 fi
 
-echo "[de4dotEx] Uploading '$INPUT_FILE' to http://localhost:8080/deobfuscate..."
+echo "[de4dotEx] Uploading '$INPUT_FILE' to http://127.0.0.1:8080/deobfuscate..."
 if [ -n "$EXTRA_OPTIONS" ]; then
     echo "[de4dotEx] Applying native flags: $EXTRA_OPTIONS"
 fi
 
 # Perform HTTP POST request and capture HTTP status code
-HTTP_CODE=$(curl -s -w "%{http_code}" \
+AUTH=()
+if [ -n "$DE4DOT_API_TOKEN" ]; then
+    AUTH=(-H "Authorization: Bearer ${DE4DOT_API_TOKEN}")
+fi
+HTTP_CODE=$(curl -s -w "%{http_code}" "${AUTH[@]}" \
     -F "file=@${INPUT_FILE}" \
     -F "options=${EXTRA_OPTIONS}" \
-    http://localhost:8080/deobfuscate \
+    http://127.0.0.1:8080/deobfuscate \
     -o "${OUTPUT_FILE}")
 
 if [ "$HTTP_CODE" -eq 200 ]; then

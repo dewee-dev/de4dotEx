@@ -81,4 +81,5 @@ Command for registering inside your MCP client config (`claude_desktop_config.js
   }
 }
 ```
-Exposes the **`deobfuscate`** tool with parameters: `file_path`, `output_path`, and `options` (for passing custom flags like `-str delegate`).
+Exposes the **`deobfuscate`** tool with parameters: `file_path`, `output_path`, and `options` (allowlisted flags such as `--preserve-tokens`, `-p crx` or `--df-inline false`). Paths must be inside the server's `DE4DOT_MCP_ROOT`.
+The server runs de4dot in a child process, but that process is **not a sandbox**. Run the server as an unprivileged user or in the Docker image, and treat every input as potentially hostile.

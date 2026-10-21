@@ -253,31 +253,55 @@ The container has an intelligent, unified entrypoint script that automatically r
 docker run --rm de4dotex --help
 
 # Deobfuscate an assembly in your current directory (mounts pwd to /work)
-docker run --rm -v "$(pwd):/work" -w /work de4dotex MyObfuscatedApp.exe -o CleanApp.exe
+docker run --rm --user "$(id -u):$(id -g)" -v "$(pwd):/work" -w /work de4dotex MyObfuscatedApp.exe -o CleanApp.exe
 ```
+The image runs as the unprivileged `app` user (UID 1654). `--user "$(id -u):$(id -g)"` lets it write to the mounted
+directory as you instead.
 
 #### B. Run as containerized HTTP Web API (on port 8080):
-Start the container in the background to spin up a high-performance HTTP microservice:
+Outside a container the server listens on 127.0.0.1 only. Inside the container the entrypoint binds 0.0.0.0, and
+the server then **refuses to start without `DE4DOT_API_TOKEN`** (at least 32 characters). Publish the port on
+localhost unless you really need it elsewhere.
 ```bash
 # Start the HTTP Microservice in background
-docker run -d -p 8080:8080 --name de4dotex-api de4dotex --mcp --http
+export DE4DOT_API_TOKEN=$(openssl rand -hex 32)
+docker run -d -p 127.0.0.1:8080:8080 -e DE4DOT_API_TOKEN --name de4dotex-api de4dotex --mcp --http
 
 # Upload an obfuscated file and download the cleaned output
-curl -F "file=@MyObfuscatedApp.dll" http://localhost:8080/deobfuscate -o CleanApp.dll
+curl -H "Authorization: Bearer $DE4DOT_API_TOKEN" -F "file=@MyObfuscatedApp.dll" http://127.0.0.1:8080/deobfuscate -o CleanApp.dll
 
-# Upload with custom native flags (e.g. preserve tokens, decrypt string delegates)
-curl -F "file=@MyObfuscatedApp.dll" \
-     -F "options=--preserve-tokens -str delegate" \
-     http://localhost:8080/deobfuscate -o CleanApp.dll
+# Upload with custom flags (allowlisted; options that name files or directories are rejected)
+curl -H "Authorization: Bearer $DE4DOT_API_TOKEN" -F "file=@MyObfuscatedApp.dll" \
+     -F "options=--preserve-tokens -p crx" \
+     http://127.0.0.1:8080/deobfuscate -o CleanApp.dll
 ```
 
-You can also use our convenient test script **`test_api.sh`** to automatically perform the upload and save the processed output next to the original file, appending `_cleaned` (e.g. `App.dll` -> `App_cleaned.dll`):
+Server settings (environment): `DE4DOT_HTTP_BIND` (default 127.0.0.1), `DE4DOT_API_TOKEN`, `DE4DOT_MAX_UPLOAD_MB`
+(100), `DE4DOT_MAX_JOBS` (2), `DE4DOT_TIMEOUT_SECONDS` (120, also the limit for receiving an upload). Each job runs
+de4dot in its own child process with a clean environment, in a private temporary directory that is deleted afterwards.
+When all job slots are busy for 2 seconds the server answers `503` (with `Retry-After`) before reading the upload.
+Requests that carry an `Origin` header or `Sec-Fetch-Site: cross-site|same-site` (i.e. come from a web page) get `403`.
+Without a token the server only accepts `Host: localhost`, `127.0.0.1` or `[::1]`, so a DNS rebinding page can't reach it.
+
+Client `options` are checked against the real de4dot option table: every option is consumed together with exactly the
+value the CLI expects, values may not start with `-` or contain `/`, `\`, `:` or `~`, and options that name files or
+directories (`-o`, `-r`, `--asm-path`, ...), `--one-file`, `--load-new-process`, `--strtok`, dynamic string decryption
+(`--strtyp delegate|emulate`) and the per-deobfuscator name regexes (`--<type>-name`, which de4dot compiles without a
+match timeout) are rejected with `400`. Per-deobfuscator switches take an explicit value, e.g. `--df-inline false`.
+The deobfuscator types (`-p`) and their options are read from de4dot itself, with a value check that matches the
+option's type (bool, int or a plain word); `de4dot.mcp --list-options` prints the resulting table.
+
+**The child process is not a sandbox.** Run the server as an unprivileged user (the Docker image does), and
+keep it away from anything you aren't willing to expose to the analysed sample. de4dotEx disables code paths that
+execute bits of the input assembly by default, but especially when analyzing malicious/untrusted inputs, there are no guarantees.
+
+You can also use the test script **`test_api.sh`** (set `DE4DOT_API_TOKEN` first) to upload a file and save the processed output next to the original, appending `_cleaned` (e.g. `App.dll` -> `App_cleaned.dll`):
 ```bash
 # Basic usage:
 ./test_api.sh MyObfuscatedApp.dll
 
 # Usage with custom flags:
-./test_api.sh MyObfuscatedApp.dll "--preserve-tokens -str delegate"
+./test_api.sh MyObfuscatedApp.dll "--preserve-tokens"
 ```
 
 #### C. Run as containerized Stdio MCP server (for AI clients):
@@ -371,9 +395,16 @@ Exposed MCP Tools
 Deobfuscate and unpack a .NET assembly (EXE or DLL) using de4dotEx.
 
 **Arguments:**
-* `file_path` (string, **required**): The absolute file path of the .NET assembly to deobfuscate.
-* `output_path` (string, *optional*): Custom file path where the cleaned assembly should be written.
-* `options` (string, *optional*): Additional CLI options to pass to the engine (e.g. `"--preserve-tokens"` or `"-str delegate"`).
+* `file_path` (string, **required**): Path of the .NET assembly to deobfuscate. Must be inside `DE4DOT_MCP_ROOT` (default: the server's working directory; symlinks are resolved).
+* `output_path` (string, *optional*): Output path inside `DE4DOT_MCP_ROOT`. It must not exist yet (nothing is overwritten). Default: `<input>-cleaned<ext>`.
+* `options` (string, *optional*): Allowlisted de4dot options, e.g. `"--preserve-tokens"`, `"-p crx"`, `"--strtyp none"`, `"--df-inline false"`. The same rules as for the HTTP API apply: options that name files or directories, `--one-file`, `--load-new-process`, dynamic string decryption and regex options are rejected.
+
+de4dot works on a private copy of the input in a temporary directory. The result (and any dumped embedded assemblies,
+under sanitized names) is then created next to `output_path` without replacing existing files, after the output
+directory has been resolved again. On Linux the opened input is checked through `/proc/self/fd`. Residual risk: someone
+who can write inside `DE4DOT_MCP_ROOT` can still race a directory swap between that last check and the file creation,
+so don't give untrusted users write access there. As with the HTTP API, the de4dot child process is **not a sandbox**;
+see the note above.
 
 How to Build the MCP Server
 ---------------------------
