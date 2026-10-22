@@ -1,16 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Reflection;
-using System.Runtime.InteropServices;
 using de4dot.blocks;
+using de4dot.blocks.cflow;
 using dnlib.DotNet;
 using dnlib.DotNet.Emit;
-using dnlib.DotNet.Writer;
 using FieldAttributes = dnlib.DotNet.FieldAttributes;
-using MethodAttributes = dnlib.DotNet.MethodAttributes;
-using TypeAttributes = dnlib.DotNet.TypeAttributes;
 
 namespace de4dot.code.deobfuscators.ConfuserEx
 {
@@ -70,7 +65,7 @@ namespace de4dot.code.deobfuscators.ConfuserEx
                 }
                 catch (Exception e)
                 {
-	                Console.WriteLine("ConfuserEx resource decryption failed: " + e.Message);
+	                Logger.e("ConfuserEx resource decryption failed: " + e.Message);
                     return;
                 }
                 
@@ -172,44 +167,35 @@ namespace de4dot.code.deobfuscators.ConfuserEx
 
         private byte[] DecryptArray(MethodDef method, byte[] encryptedArray)
         {
-            ModuleDefUser tempModule = new ModuleDefUser("TempModule");
-            
-            AssemblyDef tempAssembly = new AssemblyDefUser("TempAssembly");
-            tempAssembly.Modules.Add(tempModule);
-            
-            var tempType = new TypeDefUser("", "TempType", tempModule.CorLibTypes.Object.TypeDefOrRef);
-            tempType.Attributes = TypeAttributes.Public | TypeAttributes.Class;
             MethodDef tempMethod = Utils.Clone(method);
+            tempMethod.MethodSig = MethodSig.CreateStatic(new SZArraySig(method.Module.CorLibTypes.Byte),
+	            new SZArraySig(method.Module.CorLibTypes.UInt32));
+            tempMethod.Parameters.UpdateParameterTypes();
 
-            tempMethod.ReturnType = new SZArraySig(tempModule.CorLibTypes.Byte);
-            tempMethod.MethodSig.Params.Add(new SZArraySig(tempModule.CorLibTypes.Byte));
-            tempMethod.Attributes = MethodAttributes.Public | MethodAttributes.Static;
-
+            // Read encrypted array from argument
             for (int i = 0; i < 5; i++)
-                tempMethod.Body.Instructions.RemoveAt(2); // read encrypted array from argument
+                tempMethod.Body.Instructions.RemoveAt(2);
             tempMethod.Body.Instructions.Insert(2, OpCodes.Ldarg_0.ToInstruction());
-
+			// Strip instructions so the decrypted array is at the top of the stack for return
             for (int i = 0; i < 8; i++)
-                tempMethod.Body.Instructions.RemoveAt(tempMethod.Body.Instructions.Count -
-                                                      2); // make return decrypted array
+                tempMethod.Body.Instructions.RemoveAt(tempMethod.Body.Instructions.Count - 2);
 
-            tempType.Methods.Add(tempMethod);
-            tempModule.Types.Add(tempType);
-            
-            using (MemoryStream memoryStream = new MemoryStream())
-            {
-                ModuleWriterOptions moduleWriterOptions = new ModuleWriterOptions(tempModule);
-                moduleWriterOptions.MetadataOptions = new Metadata﻿Options();
+            if (encryptedArray.Length % 4 != 0)
+	            throw new Exception("Encrypted array length must be a multiple of 4");
 
-                tempModule.Write(memoryStream, moduleWriterOptions);
+            var inputArray = new List<Value>();
+            for (int i = 0; i < encryptedArray.Length; i += 4)
+	            inputArray.Add(new Int32Value(encryptedArray[i] | (encryptedArray[i + 1] << 8) | (encryptedArray[i + 2] << 16) | (encryptedArray[i + 3] << 24)));
 
-                Assembly patchedAssembly = Assembly.Load(memoryStream.ToArray());
-                var type = patchedAssembly.ManifestModule.GetType("TempType");
-                var methods = type.GetMethods();
-                MethodInfo patchedMethod = methods.First(m => m.IsPublic && m.IsStatic);
-                byte[] decryptedBytes = (byte[]) patchedMethod.Invoke(null, new object[]{encryptedArray});
-                return Lzma.Decompress(decryptedBytes, _isNewLzma);
-            }
+            var emu = new InstructionAndBranchEmulator(tempMethod);
+            emu.Emulator.SetArg(new Parameter(0), new ObjectValue(inputArray));
+            var outputArray = emu.Run();
+            if (outputArray is not ObjectValue { obj: List<Value> valList }
+					|| !valList.All(v => v is Int32Value i32 && i32.AllBitsValid()))
+	            throw new Exception("DecryptArray() emulation failed");
+
+            byte[] decryptedBytes = valList.Select(v => (byte)((Int32Value)v).Value).ToArray();
+            return Lzma.Decompress(decryptedBytes, _isNewLzma);
         }
 
 	    private bool IsAssembyResolveMethod(MethodDef method, FieldDef field)
