@@ -8,10 +8,11 @@ Most of the obfuscation can be completely restored (e.g., string encryption), bu
 
 It uses [dnlib](https://github.com/0xd4d/dnlib/) to read and write assemblies.
 
-***WARNING***: `de4dot` uses `BinaryFormatter` in some backends (`BabelNET` and `CodeVeil`).
-Code obfuscated with these obfuscators (or the one, that tricks `de4dot` to detect so) will cause execution of arbitrary code during deobfuscation. For example it may be possible to write code tracking attempts of applying `de4dot`.
-A more proper solution is needed for deobfuscating such binaries, such as a completely own parser doing the deserialization safely.
-Read https://learn.microsoft.com/en-us/dotnet/standard/serialization/binaryformatter-security-guide for more info.
+***WARNING***: de4dot uses `BinaryFormatter` in some backends (BabelNET and CodeVeil).
+Other backends such as Eazfuscator and ILProtector may attempt to run parts of the input assembly for deobfuscation, which is dangerous.
+Code obfuscated with these obfuscators (or samples that trick de4dot to detect them) may cause execution of arbitrary code during deobfuscation.
+**By default, these risky code paths are disabled.** If you'd like to accept the risk, code execution can be explicitly enabled by passing `--unsafe-code-execution`.
+Note that this will likely require running the .NET 4.8 build of de4dotEx on Windows - modern .NET builds will not work.
 
 Binaries
 ========

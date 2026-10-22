@@ -43,6 +43,7 @@ namespace de4dot.cui {
 			public bool RenameSymbols { get; set; }
 			public bool ControlFlowDeobfuscation { get; set; }
 			public bool KeepObfuscatorTypes { get; set; }
+			public bool AllowUnsafeCodeExecution { get; set; }
 			public bool OneFileAtATime { get; set; }
 			public DecrypterType? DefaultStringDecrypterType { get; set; }
 			public List<string> DefaultStringDecrypterMethods { get; private set; }
@@ -155,6 +156,7 @@ namespace de4dot.cui {
 				KeepObfuscatorTypes = options.KeepObfuscatorTypes,
 				MetadataFlags = options.MetadataFlags,
 				RenamerFlags = options.RenamerFlags,
+				AllowUnsafeCodeExecution = options.AllowUnsafeCodeExecution,
 				CreateDestinationDir = !onlyScan,
 			});
 
@@ -180,6 +182,7 @@ namespace de4dot.cui {
 				public bool KeepObfuscatorTypes { get; set; }
 				public MetadataFlags MetadataFlags { get; set; }
 				public RenamerFlags RenamerFlags { get; set; }
+				public bool AllowUnsafeCodeExecution { get; set; }
 				public bool CreateDestinationDir { get; set; }
 			}
 
@@ -323,6 +326,7 @@ namespace de4dot.cui {
 					KeepObfuscatorTypes = options.KeepObfuscatorTypes,
 					MetadataFlags = options.MetadataFlags,
 					RenamerFlags = options.RenamerFlags,
+					AllowUnsafeCodeExecution = options.AllowUnsafeCodeExecution,
 				};
 				if (options.DefaultStringDecrypterType != null)
 					fileOptions.StringDecrypterType = options.DefaultStringDecrypterType.Value;

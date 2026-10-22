@@ -153,6 +153,11 @@ namespace de4dot.cui {
 			miscOptions.Add(new OneArgOption(null, "default-strtok", "Default string decrypter method token or [type::][name][(args,...)]", "method", (val) => {
 				defaultStringDecrypterMethods.Add(val);
 			}));
+			miscOptions.Add(new NoArgOption(null, "unsafe-code-execution", "Allow executing arbitrary code from input file (DANGEROUS)", () => {
+				if (newFileOptions != null)
+					ExitError("Please specify --unsafe-code-execution before the file.");
+				filesOptions.AllowUnsafeCodeExecution = true;
+			}));
 			miscOptions.Add(new NoArgOption(null, "no-cflow-deob", "No control flow deobfuscation (NOT recommended)", () => {
 				if (newFileOptions != null)
 					ExitError("Please specify --no-cflow-deob before the file.");
@@ -263,6 +268,7 @@ namespace de4dot.cui {
 					KeepObfuscatorTypes = filesOptions.KeepObfuscatorTypes,
 					MetadataFlags = filesOptions.MetadataFlags,
 					RenamerFlags = filesOptions.RenamerFlags,
+					AllowUnsafeCodeExecution = filesOptions.AllowUnsafeCodeExecution,
 				};
 				if (defaultStringDecrypterType != null)
 					newFileOptions.StringDecrypterType = defaultStringDecrypterType.Value;

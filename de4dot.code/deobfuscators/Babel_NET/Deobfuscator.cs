@@ -248,7 +248,7 @@ namespace de4dot.code.deobfuscators.Babel_NET {
 				int64ValueInliner.Decrypt(blocks);
 				singleValueInliner.Decrypt(blocks);
 				doubleValueInliner.Decrypt(blocks);
-				constantsDecrypter.Deobfuscate(blocks);
+				constantsDecrypter.Deobfuscate(blocks, Operations.AllowUnsafeCodeExecution);
 			}
 			base.DeobfuscateMethodEnd(blocks);
 		}

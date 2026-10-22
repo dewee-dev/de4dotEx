@@ -88,6 +88,7 @@ namespace de4dot.code {
 			public bool PreserveTokens { get; set; }
 			public MetadataFlags MetadataFlags { get; set; }
 			public RenamerFlags RenamerFlags { get; set; }
+			public bool AllowUnsafeCodeExecution { get; set; }
 
 			public Options() {
 				StringDecrypterType = DecrypterType.Default;
@@ -220,6 +221,7 @@ namespace de4dot.code {
 			op.KeepObfuscatorTypes = options.KeepObfuscatorTypes;
 			op.MetadataFlags = options.MetadataFlags;
 			op.RenamerFlags = options.RenamerFlags;
+			op.AllowUnsafeCodeExecution = options.AllowUnsafeCodeExecution;
 
 			return op;
 		}

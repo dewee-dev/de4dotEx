@@ -32,6 +32,7 @@ namespace de4dot.code.deobfuscators {
 		MetadataFlags MetadataFlags { get; }
 		RenamerFlags RenamerFlags { get; }
 		OpDecryptString DecryptStrings { get; }
+		bool AllowUnsafeCodeExecution { get; }
 	}
 
 	public class Operations : IOperations {
@@ -39,5 +40,6 @@ namespace de4dot.code.deobfuscators {
 		public MetadataFlags MetadataFlags { get; set; }
 		public RenamerFlags RenamerFlags { get; set; }
 		public OpDecryptString DecryptStrings { get; set; }
+		public bool AllowUnsafeCodeExecution { get; set; }
 	}
 }

@@ -20,6 +20,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using dnlib.DotNet;
 using dnlib.DotNet.Emit;
@@ -83,7 +84,7 @@ namespace de4dot.code.deobfuscators.Eazfuscator_NET {
 		public TypeDef Type => stringType;
 		public EmbeddedResource Resource => encryptedResource;
 		public IEnumerable<TypeDef> Types => new List<TypeDef> { stringType, dataDecrypterType };
-		public IEnumerable<TypeDef> DynocodeTypes => dynocode.Types;
+		public IEnumerable<TypeDef> DynocodeTypes => dynocode != null ? dynocode.Types : Enumerable.Empty<TypeDef>();
 		public MethodDef Method => stringMethod;
 		public bool Detected => stringType != null;
 
@@ -232,11 +233,11 @@ namespace de4dot.code.deobfuscators.Eazfuscator_NET {
 			return null;
 		}
 
-		public void Initialize(ISimpleDeobfuscator simpleDeobfuscator) {
+		public void Initialize(ISimpleDeobfuscator simpleDeobfuscator, bool allowCodeExecution) {
 			if (stringType == null)
 				return;
 
-			if (!FindConstants(simpleDeobfuscator)) {
+			if (!FindConstants(simpleDeobfuscator, allowCodeExecution)) {
 				if (encryptedResource == null)
 					Logger.w("Could not find encrypted resource. Strings cannot be decrypted.");
 				else
@@ -245,8 +246,10 @@ namespace de4dot.code.deobfuscators.Eazfuscator_NET {
 			}
 		}
 
-		bool FindConstants(ISimpleDeobfuscator simpleDeobfuscator) {
-			dynocode = new DynamicDynocodeIterator();
+		bool FindConstants(ISimpleDeobfuscator simpleDeobfuscator, bool allowCodeExecution) {
+			if (allowCodeExecution)
+				dynocode = new DynamicDynocodeIterator();
+
 			simpleDeobfuscator.Deobfuscate(stringMethod);
 			stringMethodConsts = new EfConstantsReader(stringMethod);
 
@@ -809,6 +812,9 @@ done:
 			loopStart++;
 			loopEnd--;
 
+			if (dynocode == null)
+				throw new UnsafeCodeExecutionException();
+
 			dynocode.Initialize(module);
 			var ctorArg = emu.Pop() as Int32Value;
 			if (ctorArg == null || !ctorArg.AllBitsValid())
@@ -870,6 +876,9 @@ done:
 				return false;
 			loopStart++;
 			loopEnd--;
+
+			if (dynocode == null)
+				throw new UnsafeCodeExecutionException();
 
 			dynocode.Initialize(module);
 			var ctorArg = emu.Pop() as Int32Value;
