@@ -17,6 +17,8 @@
     along with de4dot.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+using System.Collections.Generic;
+
 namespace de4dot.blocks.cflow {
 	public enum ValueType : byte {
 		Unknown,
@@ -27,6 +29,7 @@ namespace de4dot.blocks.cflow {
 		Int64,
 		Real8,
 		String,
+		ElemRef,
 	}
 
 	public enum Bool3 {
@@ -77,5 +80,15 @@ namespace de4dot.blocks.cflow {
 		public readonly string value;
 		public StringValue(string value) : base(ValueType.String) => this.value = value;
 		public override string ToString() => $"\"{value}\"";
+	}
+
+	public class ElemRefValue : Value {
+		public readonly List<Value> Array;
+		public readonly int Index;
+
+		public ElemRefValue(List<Value> array, int index) : base(ValueType.ElemRef) {
+			Array = array;
+			Index = index;
+		}
 	}
 }
