@@ -232,10 +232,10 @@ Docker Containerization
 de4dotEx includes built-in cross-platform Docker containerization. You can build a single, lightweight container and run it in three different modes: as a standard command-line utility, as an HTTP Web API microservice, or as a containerized Stdio MCP server.
 
 We offer two different Docker strategies depending on your needs:
-1. **Strategy A (Native .NET 8.0 - Recommended):** Extremely fast, lightweight, and cross-platform. It automatically compiles the native C++ `BeaEngine` disassembler library inside the container so that advanced ConfuserEx deobfuscation works natively on Linux and macOS (ARM64/x64).
+1. **Strategy A (Native .NET 10.0 - Recommended):** Extremely fast, lightweight, and cross-platform. It automatically compiles the native C++ `BeaEngine` disassembler library inside the container so that advanced ConfuserEx deobfuscation works natively on Linux and macOS (ARM64/x64).
 2. **Strategy B (Wine + .NET Framework 4.8):** Emulates a full Windows environment to support dynamic JIT-hook protectors (like ILProtector and Agile.NET) which rely on Windows-native memory APIs (`VirtualAlloc`, `VirtualProtect`).
 
-Strategy A: Native .NET 8.0 Linux Container (Recommended)
+Strategy A: Native .NET 10.0 Linux Container (Recommended)
 --------------------------------------------------------
 
 ### 1. Build the Native Image
@@ -330,7 +330,7 @@ Docker Troubleshooting & Tips
 -----------------------------
 
 ### Apple Silicon / ARM64 Mac Hosts (M1 / M2 / M3)
-* **Strategy A (Native):** Runs flawlessly on ARM64 hosts. Docker automatically targets ARM64 and compiles .NET 8.0 and BeaEngine natively for your CPU architecture.
+* **Strategy A (Native):** Runs flawlessly on ARM64 hosts. Docker automatically targets ARM64 and compiles .NET 10.0 and BeaEngine natively for your CPU architecture.
 * **Strategy B (Wine):** Because Strategy B installs standard x86 `.NET Framework 4.8` components, you **MUST** force Docker to build and run the image targeting the Intel platform (`linux/amd64`). Docker Desktop on macOS will automatically translate the CPU instructions using Rosetta 2 / QEMU:
   ```bash
   # Build on ARM64 Mac using Intel emulation:
@@ -360,7 +360,7 @@ If you get a warning saying `DEPRECATED: The legacy builder is deprecated` or an
 Native C# MCP Server
 ====================
 
-de4dotEx includes a native **Model Context Protocol (MCP)** server built on **.NET 8.0**. 
+de4dotEx includes a native **Model Context Protocol (MCP)** server built on **.NET 10.0**. 
 
 By running de4dotEx as an MCP server, you can connect it directly to AI assistants (such as **Claude Desktop**, **Cursor IDE**, **Windsurf**, or the **VS Code MCP Client**). This allows the AI agent to programmatically and automatically deobfuscate .NET assemblies (EXE and DLL) inside directories it is analyzing!
 
@@ -380,9 +380,9 @@ How to Build the MCP Server
 
 You can build the MCP server using the standard `dotnet` CLI:
 ```bash
-dotnet publish -c Release -f net8.0 -o ./publish-net8.0-mcp de4dot.mcp
+dotnet publish -c Release -f net10.0 -o ./publish-net10.0-mcp de4dot.mcp
 ```
-After building, the published files (including the binary and its dependencies) will be placed in the `./publish-net8.0-mcp/` directory.
+After building, the published files (including the binary and its dependencies) will be placed in the `./publish-net10.0-mcp/` directory.
 
 How to Configure Your AI Client
 -------------------------------
@@ -401,7 +401,7 @@ Add the following block under the `mcpServers` object:
     "de4dotex": {
       "command": "dotnet",
       "args": [
-        "/absolute/path/to/de4dotEx/publish-net8.0-mcp/de4dot.mcp.dll"
+        "/absolute/path/to/de4dotEx/publish-net10.0-mcp/de4dot.mcp.dll"
       ]
     }
   }
@@ -414,5 +414,5 @@ Add the following block under the `mcpServers` object:
 2. Click **+ Add New MCP Server**.
 3. Name: `de4dotex`
 4. Type: `stdio`
-5. Command: `dotnet /absolute/path/to/de4dotEx/publish-net8.0-mcp/de4dot.mcp.dll`
+5. Command: `dotnet /absolute/path/to/de4dotEx/publish-net10.0-mcp/de4dot.mcp.dll`
 }
