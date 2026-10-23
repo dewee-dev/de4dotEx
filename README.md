@@ -17,7 +17,9 @@ Note that this will likely require running the .NET 4.8 build of de4dotEx on Win
 Binaries
 ========
 
-Get binaries from the build server [![](https://github.com/GDATAAdvancedAnalytics/de4dotEx/workflows/CI%20build/badge.svg)](https://github.com/GDATAAdvancedAnalytics/de4dotEx/actions).
+We recommend users to use the latest stable release from the Releases section.
+
+Bleeding edge binaries can be obtained from CI artifacts [![](https://github.com/GDATAAdvancedAnalytics/de4dotEx/workflows/CI%20build/badge.svg)](https://github.com/GDATAAdvancedAnalytics/de4dotEx/actions).
 
 Docker & MCP Server Support
 ===========================
@@ -30,9 +32,9 @@ de4dotEx now has fully integrated **Docker containerization** and native **Model
 It's FREE but there's NO SUPPORT
 ================================
 
-There's no support. Don't email me if you can't use it or if it fails to deobfuscate a file obfuscated with an updated obfuscator.
+There's no support. You may create issues on GitHub, but the maintainers will decide on a case-by-case basis if effort will be expended to work on an issue.
 
-Instead, try to update de4dot yourself. It's a lot easier than you think. If you can't, search the Internet and you should find a couple of forums where you can ask your question.
+Contributions in the form of pull requests or patches are very welcome.
 
 Features
 ========
@@ -86,13 +88,6 @@ Supported obfuscators/packers
 * Xenocode
 
 Some of the above obfuscators are rarely used (eg. Goliath.NET), so they have had much less testing. Help me out by reporting bugs or problems you find.
-
-Warning
-=======
-
-Sometimes the obfuscated assembly and all its dependencies are loaded into memory for execution. Use a safe sandbox environment if you suspect the assembly or assemblies to be malware.
-
-Even if the current version of de4dot doesn't load a certain assembly into memory for execution, a future version might.
 
 How to use de4dot
 =================
