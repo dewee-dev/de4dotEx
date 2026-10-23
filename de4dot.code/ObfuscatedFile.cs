@@ -88,6 +88,7 @@ namespace de4dot.code {
 			public bool PreserveTokens { get; set; }
 			public MetadataFlags MetadataFlags { get; set; }
 			public RenamerFlags RenamerFlags { get; set; }
+			public bool AllowUnsafeCodeExecution { get; set; }
 
 			public Options() {
 				StringDecrypterType = DecrypterType.Default;
@@ -220,6 +221,7 @@ namespace de4dot.code {
 			op.KeepObfuscatorTypes = options.KeepObfuscatorTypes;
 			op.MetadataFlags = options.MetadataFlags;
 			op.RenamerFlags = options.RenamerFlags;
+			op.AllowUnsafeCodeExecution = options.AllowUnsafeCodeExecution;
 
 			return op;
 		}
@@ -777,13 +779,29 @@ namespace de4dot.code {
 		void ISimpleDeobfuscator.DecryptStrings(MethodDef method, IDeobfuscator theDeob) =>
 			Deobfuscate(method, "Static string decryption", (blocks) => theDeob.DeobfuscateStrings(blocks));
 
+		// Counter for embedded files whose name can't be used (embedded_1.dll, embedded_2.dll, ...)
+		int embeddedFileCounter;
+
 		void IDeobfuscatedFile.CreateAssemblyFile(byte[] data, string assemblyName, string extension) {
 			if (extension == null)
 				extension = ".dll";
-			var baseDir = Utils.GetDirName(options.NewFilename);
-			var newName = Path.Combine(baseDir, assemblyName + extension);
-			Logger.n("Creating file {0}", newName);
-			File.WriteAllBytes(newName, data);
+			// assemblyName and extension come from the input file. A bad name must not abort the
+			// whole run, so a file that can't be written is logged and skipped.
+			try {
+				var newName = PathUtils.GetEmbeddedFilePath(Utils.GetDirName(options.NewFilename), assemblyName, extension, ref embeddedFileCounter);
+				if (newName == null) {
+					Logger.w("Could not find an unused file name for embedded file {0}", assemblyName);
+					return;
+				}
+				Logger.n("Creating file {0}", newName);
+				// CreateNew never overwrites an existing file and refuses a planted symlink
+				using (var stream = new FileStream(newName, FileMode.CreateNew, FileAccess.Write))
+					stream.Write(data, 0, data.Length);
+			}
+			catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentException || ex is NotSupportedException) {
+				// IOException includes PathTooLongException
+				Logger.w("Could not create embedded file {0}: {1}", assemblyName, ex.Message);
+			}
 		}
 
 		void IDeobfuscatedFile.StringDecryptersAdded() => UpdateDynamicStringInliner();

@@ -224,7 +224,7 @@ namespace de4dot.code.deobfuscators.Babel_NET {
 			}
 		}
 
-		public void Deobfuscate(Blocks blocks) {
+		public void Deobfuscate(Blocks blocks, bool allowUnsafeCode) {
 			if (arrayDecrypter == null)
 				return;
 
@@ -284,7 +284,7 @@ namespace de4dot.code.deobfuscators.Babel_NET {
 				infos.Reverse();
 				foreach (var info in infos) {
 					var elemSize = info.arrayType.Next.ElementType.GetPrimitiveSize();
-					var decrypted = DecryptArray(info.encryptedField.InitialValue, elemSize);
+					var decrypted = DecryptArray(info.encryptedField.InitialValue, elemSize, allowUnsafeCode);
 
 					initializedDataCreator.AddInitializeArrayCode(block, info.start, info.len, info.arrayType.Next.ToTypeDefOrRef(), decrypted);
 					Logger.v("Decrypted {0} array: {1} elements", info.arrayType.Next.ToString(), decrypted.Length / elemSize);
@@ -292,10 +292,14 @@ namespace de4dot.code.deobfuscators.Babel_NET {
 			}
 		}
 
-		byte[] DecryptArray(byte[] encryptedData, int elemSize) {
+		byte[] DecryptArray(byte[] encryptedData, int elemSize, bool allowUnsafeCode) {
+			if (!allowUnsafeCode)
+				throw new UnsafeCodeExecutionException();
+
 			var decrypted = resourceDecrypter.Decrypt(encryptedData);
 			#pragma warning disable SYSLIB0011
-			#warning "Insecure! Rewrite with custom parser https://learn.microsoft.com/en-us/dotnet/standard/serialization/binaryformatter-security-guide"
+			#warning "Insecure/unsupported! Rewrite with custom parser https://learn.microsoft.com/en-us/dotnet/standard/serialization/binaryformatter-security-guide"
+			// NOTE: This is not supported on .NET 9+ builds either way.
 			var ary = (Array)new BinaryFormatter().Deserialize(new MemoryStream(decrypted));
 			#pragma warning restore SYSLIB0011
 			if (ary is byte[])

@@ -141,7 +141,7 @@ namespace de4dot.tests {
 			var input = FixtureAssembly("ModernStringDecrypter");
 			var output = NewOutputPath("worker-strings.dll");
 
-			var result = RunDe4dot(input, "-o", output, "--dont-rename");
+			var result = RunDe4dot("--unsafe-code-execution", input, "-o", output, "--dont-rename");
 
 			Assert.True(result.ExitCode == 0, "de4dot exited with " + result.ExitCode);
 			Assert.Contains(result.Output, "Recovered 2 strings with the built-in", "de4dot log");
@@ -176,7 +176,7 @@ namespace de4dot.tests {
 			File.Copy(libSource, Path.Combine(extDir, "DepLibrary.dll"), true);
 
 			var output = Path.Combine(stage, "out.dll");
-			var result = RunDe4dot(Path.Combine(stage, "DepSample.dll"), "-o", output, "--dont-rename");
+			var result = RunDe4dot("--unsafe-code-execution", Path.Combine(stage, "DepSample.dll"), "-o", output, "--dont-rename");
 
 			Assert.True(result.ExitCode == 0, "de4dot exited with " + result.ExitCode);
 			Assert.Contains(result.Output, "Recovered 2 strings with the built-in", "de4dot log");
@@ -197,7 +197,7 @@ namespace de4dot.tests {
 			var input = FixtureAssembly("RelaxedDecrypter");
 			var output = NewOutputPath("relaxed-strings.dll");
 
-			var result = RunDe4dot(input, "-o", output, "--dont-rename");
+			var result = RunDe4dot("--unsafe-code-execution", input, "-o", output, "--dont-rename");
 
 			Assert.True(result.ExitCode == 0, "de4dot exited with " + result.ExitCode);
 			Assert.Contains(result.Output, "Recovered 2 strings with the built-in", "de4dot log");
@@ -218,7 +218,7 @@ namespace de4dot.tests {
 			var output = NewOutputPath("bridge-replaces.dll");
 
 			// --no-eaz-worker：强制走外部解包器那条路（默认会先试内置 worker）
-			var result = RunDe4dot(input, "-o", output, "--dont-rename", "--no-eaz-worker", "--eaz-unpacker", unpackerDir);
+			var result = RunDe4dot("--unsafe-code-execution", input, "-o", output, "--dont-rename", "--no-eaz-worker", "--eaz-unpacker", unpackerDir);
 
 			Assert.True(result.ExitCode == 0, "de4dot exited with " + result.ExitCode);
 			Assert.Contains(result.Output, "EazUnpacker produced", "de4dot log");
@@ -239,7 +239,7 @@ namespace de4dot.tests {
 			var input = FixtureAssembly("ModernStringDecrypter");
 			var output = NewOutputPath("bridge-disabled.dll");
 
-			var result = RunDe4dot(input, "-o", output, "--dont-rename", "--no-eaz-worker", "--no-eaz-unpack");
+			var result = RunDe4dot("--unsafe-code-execution", input, "-o", output, "--dont-rename", "--no-eaz-worker", "--no-eaz-unpack");
 
 			Assert.True(result.ExitCode == 0, "de4dot exited with " + result.ExitCode);
 			Assert.Contains(result.Output, "delegation is disabled", "de4dot log");
@@ -259,13 +259,34 @@ namespace de4dot.tests {
 			var unpackerDir = CreateStubUnpacker(marker, withWorker: false);
 			var output = NewOutputPath("bridge-incomplete.dll");
 
-			var result = RunDe4dot(input, "-o", output, "--dont-rename", "--no-eaz-worker", "--eaz-unpacker", unpackerDir);
+			var result = RunDe4dot("--unsafe-code-execution", input, "-o", output, "--dont-rename", "--no-eaz-worker", "--eaz-unpacker", unpackerDir);
 
 			Assert.True(result.ExitCode == 0, "de4dot exited with " + result.ExitCode);
 			Assert.Contains(result.Output, "Incomplete EazUnpacker", "de4dot log");
 			Assert.True(File.Exists(output), "de4dot didn't write " + output);
 			Assert.True(Assert.FileContainsText(output, "ModernStringDecrypter"),
 				"output should still be the original module when the unpacker is unusable");
+		}
+
+		/// <summary>
+		/// 安全门控：现代 Eazfuscator 的恢复必须执行样本代码，没给 --unsafe-code-execution
+		/// 时只能告警、不许跑 worker，输出仍是原模块。
+		/// </summary>
+		public void ModernNeedsUnsafeFlag() {
+			RequireWindows();
+
+			var input = FixtureAssembly("ModernStringDecrypter");
+			var output = NewOutputPath("gate-disabled.dll");
+
+			var result = RunDe4dot(input, "-o", output, "--dont-rename");
+
+			Assert.True(result.ExitCode == 0, "de4dot exited with " + result.ExitCode);
+			Assert.Contains(result.Output, "requires running the input assembly", "de4dot log");
+			Assert.Contains(result.Output, "--unsafe-code-execution", "de4dot log");
+			Assert.NotContains(result.Output, "Recovered 2 strings with the built-in", "de4dot log");
+			Assert.True(File.Exists(output), "de4dot didn't write " + output);
+			Assert.True(Assert.FileContainsText(output, "ModernStringDecrypter"),
+				"output should still be the original module when code execution isn't allowed");
 		}
 
 		/// <summary>命令行选项必须出现在 -h 里（miscOptions 注册丢失是容易犯的错）。</summary>

@@ -186,7 +186,7 @@ namespace de4dot.code.deobfuscators.Agile_NET {
 
 			byte[] fileData = ModuleBytes ?? DeobUtils.ReadModule(module);
 			using (var peImage = new MyPEImage(fileData)) {
-				if (!new MethodsDecrypter().Decrypt(peImage, module, cliSecureRtType, ref dumpedMethods)) {
+				if (!new MethodsDecrypter().Decrypt(peImage, module, cliSecureRtType, ref dumpedMethods, Operations.AllowUnsafeCodeExecution)) {
 					Logger.v("Methods aren't encrypted or invalid signature");
 					return false;
 				}

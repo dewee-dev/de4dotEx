@@ -66,7 +66,8 @@ namespace de4dot.cui {
 				result[p.Type] = p;
 		}
 
-		static IList<IDeobfuscatorInfo> CreateDeobfuscatorInfos() {
+		// Also used by de4dot.mcp to find the deobfuscators and their options.
+		public static IList<IDeobfuscatorInfo> CreateDeobfuscatorInfos() {
 			var local = new List<IDeobfuscatorInfo> {
 				new de4dot.code.deobfuscators.Unknown.DeobfuscatorInfo(),
 				new de4dot.code.deobfuscators.Agile_NET.DeobfuscatorInfo(),

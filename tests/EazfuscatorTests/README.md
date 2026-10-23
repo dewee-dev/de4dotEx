@@ -36,13 +36,21 @@ dotnet tests/EazfuscatorTests/bin/Release/net10.0/EazfuscatorTests.dll
 |---|---|---|
 | `modern-detected` | 正例夹具被判为 `Eazfuscator.NET (modern, 2021.1+)` | 全部 |
 | `lookalike-not-detected` | 两个反例都不出现 `Eazfuscator.NET` | 全部 |
+| `worker-recovers-strings` | 内置 worker 把 `ldc.i4; call` 换成 `ldstr` 明文 | Windows |
+| `worker-recovers-strings-with-dependency` | 依赖散在子目录时仍能恢复（探针平铺依赖树） | Windows |
+| `worker-recovers-strings-relaxed-decrypter` | 只有 `string(int)` 的 2026.2 形状也能恢复 | Windows |
 | `bridge-replaces-module` | 输出里是解包产物的标记类型，原始夹具的类型消失 | Windows |
 | `bridge-disabled-falls-back` | `--no-eaz-unpack` 时告警并仍输出原模块 | Windows |
 | `bridge-incomplete-unpacker-falls-back` | 解包器缺 `worker\` 时告警、不崩、仍输出 | Windows |
+| `modern-needs-unsafe-flag` | 没有 `--unsafe-code-execution` 时不跑样本、只告警 | Windows |
 | `help-lists-options` | `-h` 里有 `--eaz-unpacker` 等四个选项 | 全部 |
 
 需要 Windows 的场景是因为桩解包器是 net48 的 exe；非 Windows 平台会打印 `SKIP`
 而不是失败。
+
+所有会真正恢复字符串的场景都必须带 `--unsafe-code-execution`，而且要放在输入文件
+**之前**（它属于 misc 选项，写在文件名后面会被当成文件选项拒绝）。这是上游的安全
+门控：恢复过程要执行样本里的代码，不显式允许就不许跑。
 
 ## 夹具
 
@@ -60,6 +68,8 @@ dotnet tests/EazfuscatorTests/bin/Release/net10.0/EazfuscatorTests.dll
 - 去掉 `FindStringDecrypter` 里的 `method.IsAssembly` 检查 →
   `lookalike-not-detected` 失败；
 - 让 `GetDecryptedModule` 返回 `false`（即不再换模块）→
-  `bridge-replaces-module` 失败。
+  `bridge-replaces-module` 失败；
+- 去掉 `GetDecryptedModule` 里 `Operations.AllowUnsafeCodeExecution` 的判断 →
+  `modern-needs-unsafe-flag` 失败（样本被执行、字符串被恢复）。
 
 改动识别规则或委托逻辑后，建议按上面两条各做一次反向验证，确认测试还在守东西。

@@ -3,7 +3,7 @@
     Forked and continued as de4dotEx.
 
     Copyright (C) 2011-2020 de4dot@gmail.com
-    Copyright (C) 2025 G DATA Advanced Analytics GmbH
+    Copyright (C) 2025-2026 G DATA Advanced Analytics GmbH
 
     de4dotEx is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by

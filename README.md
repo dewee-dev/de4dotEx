@@ -8,15 +8,18 @@ Most of the obfuscation can be completely restored (e.g., string encryption), bu
 
 It uses [dnlib](https://github.com/0xd4d/dnlib/) to read and write assemblies.
 
-***WARNING***: `de4dot` uses `BinaryFormatter` in some backends (`BabelNET` and `CodeVeil`).
-Code obfuscated with these obfuscators (or the one, that tricks `de4dot` to detect so) will cause execution of arbitrary code during deobfuscation. For example it may be possible to write code tracking attempts of applying `de4dot`.
-A more proper solution is needed for deobfuscating such binaries, such as a completely own parser doing the deserialization safely.
-Read https://learn.microsoft.com/en-us/dotnet/standard/serialization/binaryformatter-security-guide for more info.
+***WARNING***: de4dot uses `BinaryFormatter` in some backends (BabelNET and CodeVeil).
+Other backends such as Eazfuscator and ILProtector may attempt to run parts of the input assembly for deobfuscation, which is dangerous.
+Code obfuscated with these obfuscators (or samples that trick de4dot to detect them) may cause execution of arbitrary code during deobfuscation.
+**By default, these risky code paths are disabled.** If you'd like to accept the risk, code execution can be explicitly enabled by passing `--unsafe-code-execution`.
+Note that this will likely require running the .NET 4.8 build of de4dotEx on Windows - modern .NET builds will not work.
 
 Binaries
 ========
 
-Get binaries from the build server [![](https://github.com/GDATAAdvancedAnalytics/de4dotEx/workflows/CI%20build/badge.svg)](https://github.com/GDATAAdvancedAnalytics/de4dotEx/actions).
+We recommend users to use the latest stable release from the Releases section.
+
+Bleeding edge binaries can be obtained from CI artifacts [![](https://github.com/GDATAAdvancedAnalytics/de4dotEx/workflows/CI%20build/badge.svg)](https://github.com/GDATAAdvancedAnalytics/de4dotEx/actions).
 
 Packaged builds are published to [Releases](https://github.com/dewee-dev/de4dotEx/releases).
 Pushing a tag (`git tag v3.11.0 && git push origin v3.11.0`) or running the *CI Build* workflow
@@ -34,9 +37,9 @@ de4dotEx now has fully integrated **Docker containerization** and native **Model
 It's FREE but there's NO SUPPORT
 ================================
 
-There's no support. Don't email me if you can't use it or if it fails to deobfuscate a file obfuscated with an updated obfuscator.
+There's no support. You may create issues on GitHub, but the maintainers will decide on a case-by-case basis if effort will be expended to work on an issue.
 
-Instead, try to update de4dot yourself. It's a lot easier than you think. If you can't, search the Internet and you should find a couple of forums where you can ask your question.
+Contributions in the form of pull requests or patches are very welcome.
 
 Features
 ========
@@ -124,6 +127,12 @@ The unpacker must be complete: `worker\Unpacker.Worker.exe` has to sit next to
 
 Behaviour notes:
 
+* **Recovery runs the input assembly, so it needs `--unsafe-code-execution`.**
+  Both backends work by executing code from the file under analysis: the built-in
+  worker rewrites a copy of the sample into a console program and runs it, and
+  EazUnpacker does the same internally. Without the flag, a modern file is still
+  detected and written back out, but strings are not recovered and a warning says
+  how to enable it.
 * `-d` only reports `Eazfuscator.NET (modern, 2021.1+)`; it never runs the unpacker.
 * If the unpacker is missing, times out, or fails, de4dotEx logs a warning and
   still writes an output file. The legacy Eazfuscator.NET recovery is skipped for
@@ -136,8 +145,9 @@ Behaviour notes:
 Example:
 
 ```bash
-# Put the unpacker next to de4dot, or point at it explicitly
-de4dot MyApp.exe -o MyApp-cleaned.exe --eaz-unpacker C:\tools\EazUnpacker --dont-rename -v
+# Put the unpacker next to de4dot, or point at it explicitly.
+# --unsafe-code-execution is required: the sample gets executed in a child process.
+de4dot MyApp.exe -o MyApp-cleaned.exe --unsafe-code-execution --eaz-unpacker C:\tools\EazUnpacker --dont-rename -v
 ```
 
 Regression tests live in [`tests/EazfuscatorTests`](tests/EazfuscatorTests/README.md).
@@ -150,9 +160,9 @@ They run on every CI build.
 The EazUnpacker bridge above needs you to download and place a separate
 `Unpacker-net48.exe` next to de4dot. de4dotEx also ships a **built-in worker**
 (`de4dot.eazworker`) that recovers modern Eazfuscator strings *without* that
-external project. It is **enabled by default** and is tried before the EazUnpacker
-bridge; only if it fails does de4dotEx fall back to the bridge (or, if the bridge
-is disabled, to the legacy path).
+external project. It is **enabled by default** (subject to `--unsafe-code-execution`)
+and is tried before the EazUnpacker bridge; only if it fails does de4dotEx fall back
+to the bridge (or, if the bridge is disabled, to the legacy path).
 
 How it works:
 
@@ -172,8 +182,10 @@ How it works:
   Eazfuscator path.
 
 Because the worker **executes** the target assembly's module initializers in the
-child process, the same sandboxing warning applies as for dynamic string
-decryption: only run it on binaries you trust, or in an isolated environment.
+child process, it is gated behind `--unsafe-code-execution` together with the rest
+of de4dot's code-executing features. Without that flag, modern files are still
+detected and rewritten, but no strings are recovered and a warning names the flag.
+Only run it on binaries you trust, or in an isolated environment.
 
 The probe is written to a throwaway temp directory together with a **flattened
 copy of every `*.dll` found under the input file's directory tree**. This is
@@ -216,19 +228,24 @@ project is built automatically when you build `de4dot` and its output lands next
 Example:
 
 ```bash
-# Default behaviour: built-in worker first, falls back to EazUnpacker if needed
-de4dot MyApp.exe -o MyApp-cleaned.exe --dont-rename -v
+# Default behaviour: built-in worker first, falls back to EazUnpacker if needed.
+# --unsafe-code-execution is required, because the worker runs the sample.
+de4dot MyApp.exe -o MyApp-cleaned.exe --unsafe-code-execution --dont-rename -v
 
 # Force the external bridge and skip the built-in worker
-de4dot MyApp.exe --no-eaz-worker --eaz-unpacker C:\tools\EazUnpacker
+de4dot MyApp.exe --unsafe-code-execution --no-eaz-worker --eaz-unpacker C:\tools\EazUnpacker
 ```
 
-Warning
-=======
+Security
+========
 
-Sometimes the obfuscated assembly and all its dependencies are loaded into memory for execution. Use a safe sandbox environment if you suspect the assembly or assemblies to be malware.
+Sometimes the obfuscated assembly and all its dependencies are loaded into memory
+for execution. Use a safe sandbox environment if you suspect the assembly or
+assemblies to be malware. Even if the current version of de4dot doesn't load a
+certain assembly into memory for execution, a future version might. Operations
+that execute code from the input file are gated behind `--unsafe-code-execution`.
 
-Even if the current version of de4dot doesn't load a certain assembly into memory for execution, a future version might.
+See [SECURITY.md](SECURITY.md) for the full policy.
 
 How to use de4dot
 =================
@@ -368,10 +385,10 @@ Docker Containerization
 de4dotEx includes built-in cross-platform Docker containerization. You can build a single, lightweight container and run it in three different modes: as a standard command-line utility, as an HTTP Web API microservice, or as a containerized Stdio MCP server.
 
 We offer two different Docker strategies depending on your needs:
-1. **Strategy A (Native .NET 8.0 - Recommended):** Extremely fast, lightweight, and cross-platform. It automatically compiles the native C++ `BeaEngine` disassembler library inside the container so that advanced ConfuserEx deobfuscation works natively on Linux and macOS (ARM64/x64).
+1. **Strategy A (Native .NET 10.0 - Recommended):** Extremely fast, lightweight, and cross-platform. It automatically compiles the native C++ `BeaEngine` disassembler library inside the container so that advanced ConfuserEx deobfuscation works natively on Linux and macOS (ARM64/x64).
 2. **Strategy B (Wine + .NET Framework 4.8):** Emulates a full Windows environment to support dynamic JIT-hook protectors (like ILProtector and Agile.NET) which rely on Windows-native memory APIs (`VirtualAlloc`, `VirtualProtect`).
 
-Strategy A: Native .NET 8.0 Linux Container (Recommended)
+Strategy A: Native .NET 10.0 Linux Container (Recommended)
 --------------------------------------------------------
 
 ### 1. Build the Native Image
@@ -389,31 +406,55 @@ The container has an intelligent, unified entrypoint script that automatically r
 docker run --rm de4dotex --help
 
 # Deobfuscate an assembly in your current directory (mounts pwd to /work)
-docker run --rm -v "$(pwd):/work" -w /work de4dotex MyObfuscatedApp.exe -o CleanApp.exe
+docker run --rm --user "$(id -u):$(id -g)" -v "$(pwd):/work" -w /work de4dotex MyObfuscatedApp.exe -o CleanApp.exe
 ```
+The image runs as the unprivileged `app` user (UID 1654). `--user "$(id -u):$(id -g)"` lets it write to the mounted
+directory as you instead.
 
 #### B. Run as containerized HTTP Web API (on port 8080):
-Start the container in the background to spin up a high-performance HTTP microservice:
+Outside a container the server listens on 127.0.0.1 only. Inside the container the entrypoint binds 0.0.0.0, and
+the server then **refuses to start without `DE4DOT_API_TOKEN`** (at least 32 characters). Publish the port on
+localhost unless you really need it elsewhere.
 ```bash
 # Start the HTTP Microservice in background
-docker run -d -p 8080:8080 --name de4dotex-api de4dotex --mcp --http
+export DE4DOT_API_TOKEN=$(openssl rand -hex 32)
+docker run -d -p 127.0.0.1:8080:8080 -e DE4DOT_API_TOKEN --name de4dotex-api de4dotex --mcp --http
 
 # Upload an obfuscated file and download the cleaned output
-curl -F "file=@MyObfuscatedApp.dll" http://localhost:8080/deobfuscate -o CleanApp.dll
+curl -H "Authorization: Bearer $DE4DOT_API_TOKEN" -F "file=@MyObfuscatedApp.dll" http://127.0.0.1:8080/deobfuscate -o CleanApp.dll
 
-# Upload with custom native flags (e.g. preserve tokens, decrypt string delegates)
-curl -F "file=@MyObfuscatedApp.dll" \
-     -F "options=--preserve-tokens -str delegate" \
-     http://localhost:8080/deobfuscate -o CleanApp.dll
+# Upload with custom flags (allowlisted; options that name files or directories are rejected)
+curl -H "Authorization: Bearer $DE4DOT_API_TOKEN" -F "file=@MyObfuscatedApp.dll" \
+     -F "options=--preserve-tokens -p crx" \
+     http://127.0.0.1:8080/deobfuscate -o CleanApp.dll
 ```
 
-You can also use our convenient test script **`test_api.sh`** to automatically perform the upload and save the processed output next to the original file, appending `_cleaned` (e.g. `App.dll` -> `App_cleaned.dll`):
+Server settings (environment): `DE4DOT_HTTP_BIND` (default 127.0.0.1), `DE4DOT_API_TOKEN`, `DE4DOT_MAX_UPLOAD_MB`
+(100), `DE4DOT_MAX_JOBS` (2), `DE4DOT_TIMEOUT_SECONDS` (120, also the limit for receiving an upload). Each job runs
+de4dot in its own child process with a clean environment, in a private temporary directory that is deleted afterwards.
+When all job slots are busy for 2 seconds the server answers `503` (with `Retry-After`) before reading the upload.
+Requests that carry an `Origin` header or `Sec-Fetch-Site: cross-site|same-site` (i.e. come from a web page) get `403`.
+Without a token the server only accepts `Host: localhost`, `127.0.0.1` or `[::1]`, so a DNS rebinding page can't reach it.
+
+Client `options` are checked against the real de4dot option table: every option is consumed together with exactly the
+value the CLI expects, values may not start with `-` or contain `/`, `\`, `:` or `~`, and options that name files or
+directories (`-o`, `-r`, `--asm-path`, ...), `--one-file`, `--load-new-process`, `--strtok`, dynamic string decryption
+(`--strtyp delegate|emulate`) and the per-deobfuscator name regexes (`--<type>-name`, which de4dot compiles without a
+match timeout) are rejected with `400`. Per-deobfuscator switches take an explicit value, e.g. `--df-inline false`.
+The deobfuscator types (`-p`) and their options are read from de4dot itself, with a value check that matches the
+option's type (bool, int or a plain word); `de4dot.mcp --list-options` prints the resulting table.
+
+**The child process is not a sandbox.** Run the server as an unprivileged user (the Docker image does), and
+keep it away from anything you aren't willing to expose to the analysed sample. de4dotEx disables code paths that
+execute bits of the input assembly by default, but especially when analyzing malicious/untrusted inputs, there are no guarantees.
+
+You can also use the test script **`test_api.sh`** (set `DE4DOT_API_TOKEN` first) to upload a file and save the processed output next to the original, appending `_cleaned` (e.g. `App.dll` -> `App_cleaned.dll`):
 ```bash
 # Basic usage:
 ./test_api.sh MyObfuscatedApp.dll
 
 # Usage with custom flags:
-./test_api.sh MyObfuscatedApp.dll "--preserve-tokens -str delegate"
+./test_api.sh MyObfuscatedApp.dll "--preserve-tokens"
 ```
 
 #### C. Run as containerized Stdio MCP server (for AI clients):
@@ -466,7 +507,7 @@ Docker Troubleshooting & Tips
 -----------------------------
 
 ### Apple Silicon / ARM64 Mac Hosts (M1 / M2 / M3)
-* **Strategy A (Native):** Runs flawlessly on ARM64 hosts. Docker automatically targets ARM64 and compiles .NET 8.0 and BeaEngine natively for your CPU architecture.
+* **Strategy A (Native):** Runs flawlessly on ARM64 hosts. Docker automatically targets ARM64 and compiles .NET 10.0 and BeaEngine natively for your CPU architecture.
 * **Strategy B (Wine):** Because Strategy B installs standard x86 `.NET Framework 4.8` components, you **MUST** force Docker to build and run the image targeting the Intel platform (`linux/amd64`). Docker Desktop on macOS will automatically translate the CPU instructions using Rosetta 2 / QEMU:
   ```bash
   # Build on ARM64 Mac using Intel emulation:
@@ -496,7 +537,7 @@ If you get a warning saying `DEPRECATED: The legacy builder is deprecated` or an
 Native C# MCP Server
 ====================
 
-de4dotEx includes a native **Model Context Protocol (MCP)** server built on **.NET 8.0**. 
+de4dotEx includes a native **Model Context Protocol (MCP)** server built on **.NET 10.0**. 
 
 By running de4dotEx as an MCP server, you can connect it directly to AI assistants (such as **Claude Desktop**, **Cursor IDE**, **Windsurf**, or the **VS Code MCP Client**). This allows the AI agent to programmatically and automatically deobfuscate .NET assemblies (EXE and DLL) inside directories it is analyzing!
 
@@ -507,18 +548,25 @@ Exposed MCP Tools
 Deobfuscate and unpack a .NET assembly (EXE or DLL) using de4dotEx.
 
 **Arguments:**
-* `file_path` (string, **required**): The absolute file path of the .NET assembly to deobfuscate.
-* `output_path` (string, *optional*): Custom file path where the cleaned assembly should be written.
-* `options` (string, *optional*): Additional CLI options to pass to the engine (e.g. `"--preserve-tokens"` or `"-str delegate"`).
+* `file_path` (string, **required**): Path of the .NET assembly to deobfuscate. Must be inside `DE4DOT_MCP_ROOT` (default: the server's working directory; symlinks are resolved).
+* `output_path` (string, *optional*): Output path inside `DE4DOT_MCP_ROOT`. It must not exist yet (nothing is overwritten). Default: `<input>-cleaned<ext>`.
+* `options` (string, *optional*): Allowlisted de4dot options, e.g. `"--preserve-tokens"`, `"-p crx"`, `"--strtyp none"`, `"--df-inline false"`. The same rules as for the HTTP API apply: options that name files or directories, `--one-file`, `--load-new-process`, dynamic string decryption and regex options are rejected.
+
+de4dot works on a private copy of the input in a temporary directory. The result (and any dumped embedded assemblies,
+under sanitized names) is then created next to `output_path` without replacing existing files, after the output
+directory has been resolved again. On Linux the opened input is checked through `/proc/self/fd`. Residual risk: someone
+who can write inside `DE4DOT_MCP_ROOT` can still race a directory swap between that last check and the file creation,
+so don't give untrusted users write access there. As with the HTTP API, the de4dot child process is **not a sandbox**;
+see the note above.
 
 How to Build the MCP Server
 ---------------------------
 
 You can build the MCP server using the standard `dotnet` CLI:
 ```bash
-dotnet publish -c Release -f net8.0 -o ./publish-net8.0-mcp de4dot.mcp
+dotnet publish -c Release -f net10.0 -o ./publish-net10.0-mcp de4dot.mcp
 ```
-After building, the published files (including the binary and its dependencies) will be placed in the `./publish-net8.0-mcp/` directory.
+After building, the published files (including the binary and its dependencies) will be placed in the `./publish-net10.0-mcp/` directory.
 
 How to Configure Your AI Client
 -------------------------------
@@ -537,7 +585,7 @@ Add the following block under the `mcpServers` object:
     "de4dotex": {
       "command": "dotnet",
       "args": [
-        "/absolute/path/to/de4dotEx/publish-net8.0-mcp/de4dot.mcp.dll"
+        "/absolute/path/to/de4dotEx/publish-net10.0-mcp/de4dot.mcp.dll"
       ]
     }
   }
@@ -550,5 +598,5 @@ Add the following block under the `mcpServers` object:
 2. Click **+ Add New MCP Server**.
 3. Name: `de4dotex`
 4. Type: `stdio`
-5. Command: `dotnet /absolute/path/to/de4dotEx/publish-net8.0-mcp/de4dot.mcp.dll`
+5. Command: `dotnet /absolute/path/to/de4dotEx/publish-net10.0-mcp/de4dot.mcp.dll`
 }

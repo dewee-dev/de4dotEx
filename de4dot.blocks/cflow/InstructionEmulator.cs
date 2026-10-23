@@ -315,6 +315,7 @@ namespace de4dot.blocks.cflow {
 			case Code.Conv_I2:	Emulate_Conv_I2(instr); break;
 			case Code.Conv_I4:	Emulate_Conv_I4(instr); break;
 			case Code.Conv_I8:	Emulate_Conv_I8(instr); break;
+			case Code.Conv_U:	Emulate_Conv_U(instr); break;
 			case Code.Add:		Emulate_Add(instr); break;
 			case Code.Sub:		Emulate_Sub(instr); break;
 			case Code.Mul:		Emulate_Mul(instr); break;
@@ -370,13 +371,7 @@ namespace de4dot.blocks.cflow {
 			case Code.Ldelem_I8: valueStack.Pop(2); valueStack.Push(Int64Value.CreateUnknown()); break;
 			case Code.Ldelem:	 valueStack.Pop(2); valueStack.Push(GetUnknownValue(instr.Operand as ITypeDefOrRef)); break;
 
-			case Code.Ldind_I1:	valueStack.Pop(); valueStack.Push(Int32Value.CreateUnknown()); break;
-			case Code.Ldind_I2:	valueStack.Pop(); valueStack.Push(Int32Value.CreateUnknown()); break;
-			case Code.Ldind_I4:	valueStack.Pop(); valueStack.Push(Int32Value.CreateUnknown()); break;
 			case Code.Ldind_I8:	valueStack.Pop(); valueStack.Push(Int64Value.CreateUnknown()); break;
-			case Code.Ldind_U1:	valueStack.Pop(); valueStack.Push(Int32Value.CreateUnknownUInt8()); break;
-			case Code.Ldind_U2:	valueStack.Pop(); valueStack.Push(Int32Value.CreateUnknownUInt16()); break;
-			case Code.Ldind_U4:	valueStack.Pop(); valueStack.Push(Int32Value.CreateUnknown()); break;
 
 			case Code.Ldlen:	Emulate_Ldlen(instr); break;
 			case Code.Sizeof:	Emulate_Sizeof(instr); break;
@@ -390,24 +385,35 @@ namespace de4dot.blocks.cflow {
 			case Code.Ldvirtftn:valueStack.Pop(); valueStack.Push(new ObjectValue()); break;
 			case Code.Ldflda:	valueStack.Pop(); valueStack.Push(new ObjectValue()); break;
 
-			case Code.Unbox:
-
 			case Code.Conv_R_Un:Emulate_Conv_R_Un(instr); break;
 			case Code.Conv_R4:	Emulate_Conv_R4(instr); break;
 			case Code.Conv_R8:	Emulate_Conv_R8(instr); break;
 
-            case Code.Newarr: Emulate_Newarr(instr); break;
-            case Code.Stelem_I1:
-            case Code.Stelem_I2:
-            case Code.Stelem_I4: Emulate_Stelem_I1I2I4(instr); break;
-            case Code.Ldelem_I1:
-            case Code.Ldelem_U1:
-            case Code.Ldelem_I2:
-            case Code.Ldelem_U2:
-            case Code.Ldelem_I4:
-            case Code.Ldelem_U4: Emulate_Ldelem_IU1IU2IU4(instr); break;
+			case Code.Newarr: Emulate_Newarr(instr); break;
+			case Code.Stelem_I1:
+			case Code.Stelem_I2:
+			case Code.Stelem_I4: Emulate_Stelem_I1I2I4(instr); break;
+			case Code.Ldelem_I1:
+			case Code.Ldelem_U1:
+			case Code.Ldelem_I2:
+			case Code.Ldelem_U2:
+			case Code.Ldelem_I4:
+			case Code.Ldelem_U4: Emulate_Ldelem_IU1IU2IU4(instr); break;
 
-            case Code.Arglist:
+			case Code.Ldelema: Emulate_Ldelema(instr); break;
+			case Code.Ldind_I1:
+			case Code.Ldind_U1:
+			case Code.Ldind_I2:
+			case Code.Ldind_U2:
+			case Code.Ldind_I4:
+			case Code.Ldind_U4: Emulate_Ldind_IU1IU2IU4(instr); break;
+			case Code.Stind_I1:
+			case Code.Stind_I2:
+			case Code.Stind_I4: Emulate_Stind_I1I2I4(instr); break;
+			case Code.Ldobj: Emulate_Ldobj(instr); break;
+			case Code.Stobj: Emulate_Stobj(instr); break;
+
+			case Code.Arglist:
 			case Code.Beq:
 			case Code.Beq_S:
 			case Code.Bge:
@@ -443,7 +449,6 @@ namespace de4dot.blocks.cflow {
 			case Code.Conv_Ovf_I_Un:
 			case Code.Conv_Ovf_U:
 			case Code.Conv_Ovf_U_Un:
-			case Code.Conv_U:
 			case Code.Cpblk:
 			case Code.Cpobj:
 			case Code.Endfilter:
@@ -451,7 +456,6 @@ namespace de4dot.blocks.cflow {
 			case Code.Initblk:
 			case Code.Initobj:
 			case Code.Jmp:
-			case Code.Ldelema:
 			case Code.Ldelem_I:
 			case Code.Ldelem_R4:
 			case Code.Ldelem_R8:
@@ -460,7 +464,6 @@ namespace de4dot.blocks.cflow {
 			case Code.Ldind_R4:
 			case Code.Ldind_R8:
 			case Code.Ldind_Ref:
-			case Code.Ldobj:
 			case Code.Leave:
 			case Code.Leave_S:
 			case Code.Localloc:
@@ -481,19 +484,16 @@ namespace de4dot.blocks.cflow {
 			case Code.Stelem_Ref:
 			case Code.Stfld:
 			case Code.Stind_I:
-			case Code.Stind_I1:
-			case Code.Stind_I2:
-			case Code.Stind_I4:
 			case Code.Stind_I8:
 			case Code.Stind_R4:
 			case Code.Stind_R8:
 			case Code.Stind_Ref:
-			case Code.Stobj:
 			case Code.Stsfld:
 			case Code.Switch:
 			case Code.Tailcall:
 			case Code.Throw:
 			case Code.Unaligned:
+			case Code.Unbox:
 			case Code.Volatile:
 			default:
 				UpdateStack(instr);
@@ -532,18 +532,21 @@ namespace de4dot.blocks.cflow {
         void Emulate_Newarr(Instruction instr)
         {
             var val = valueStack.Pop();
+            int size = 0;
             if (val.IsInt32() && val is Int32Value { Value: < 500000 and >= 0 } arrSize)
-            {
-                var arr = new List<Value>(arrSize.Value);
-                for (int i = 0; i < arrSize.Value; i++) {
-	                arr.Add(new UnknownValue());
-                }
-                valueStack.Push(new ObjectValue(arr));
+	            size = arrSize.Value;
+            else if (val.IsInt64() && val is Int64Value { Value: < 500000 and >= 0 } arrSize64)
+	            size = (int)arrSize64.Value;
+            else {
+	            valueStack.Push(new ObjectValue());
+	            return;
             }
-            else
-            {
-                valueStack.Push(new ObjectValue());
+
+            var arr = new List<Value>(size);
+            for (int i = 0; i < size; i++) {
+                arr.Add(new UnknownValue());
             }
+            valueStack.Push(new ObjectValue(arr));
         }
 
         void Emulate_Ldlen(Instruction instr) {
@@ -585,7 +588,63 @@ namespace de4dot.blocks.cflow {
             }
         }
 
-        void Emulate_Conv_U1(Instruction instr) {
+		void Emulate_Ldelema(Instruction instr) {
+			var idxValue = valueStack.Pop();
+			var obj = valueStack.Pop();
+			if (idxValue is Int32Value idx && idx.AllBitsValid()
+					&& obj is ObjectValue { obj: List<Value> arr } && idx.Value >= 0 && arr.Count > idx.Value) {
+				valueStack.Push(new ElemRefValue(arr, idx.Value));
+			}
+			else {
+				valueStack.PushUnknown();
+			}
+		}
+
+		void Emulate_Ldind_IU1IU2IU4(Instruction instr) {
+			var elemRef = valueStack.Pop();
+			if (elemRef is ElemRefValue eRef) {
+				valueStack.Push(eRef.Array[eRef.Index]);
+			}
+			else {
+				valueStack.Push(instr.OpCode.Code switch {
+					Code.Ldind_U1 => Int32Value.CreateUnknownUInt8(),
+					Code.Ldind_U2 => Int32Value.CreateUnknownUInt16(),
+					_ => Int32Value.CreateUnknown()
+				});
+			}
+		}
+
+		void Emulate_Stind_I1I2I4(Instruction instr) {
+			var val = valueStack.Pop();
+			var elemRef = valueStack.Pop();
+			if (elemRef is ElemRefValue eRef) {
+				eRef.Array[eRef.Index] = instr.OpCode.Code switch {
+					Code.Stind_I1 => val is Int32Value valI32 ? valI32.ToUInt8() : Int32Value.CreateUnknownUInt8(),
+					Code.Stind_I2 => val is Int32Value valI32 ? valI32.ToUInt16() : Int32Value.CreateUnknownUInt16(),
+					_ => val
+				};
+			}
+		}
+
+		void Emulate_Ldobj(Instruction instr) {
+			var elemRef = valueStack.Pop();
+			if (elemRef is ElemRefValue eRef) {
+				valueStack.Push(eRef.Array[eRef.Index]);
+			}
+			else {
+				valueStack.PushUnknown();
+			}
+		}
+
+		void Emulate_Stobj(Instruction instr) {
+			var toStore = valueStack.Pop();
+			var elemRef = valueStack.Pop();
+			if (elemRef is ElemRefValue eRef) {
+				eRef.Array[eRef.Index] = toStore;
+			}
+		}
+
+		void Emulate_Conv_U1(Instruction instr) {
 			var val1 = valueStack.Pop();
 			switch (val1.valueType) {
 			case ValueType.Int32:	valueStack.Push(Int32Value.Conv_U1((Int32Value)val1)); break;
@@ -661,6 +720,16 @@ namespace de4dot.blocks.cflow {
 			case ValueType.Int32:	valueStack.Push(Int64Value.Conv_I8((Int32Value)val1)); break;
 			case ValueType.Int64:	valueStack.Push(Int64Value.Conv_I8((Int64Value)val1)); break;
 			case ValueType.Real8:	valueStack.Push(Int64Value.Conv_I8((Real8Value)val1)); break;
+			default:				valueStack.Push(Int64Value.CreateUnknown()); break;
+			}
+		}
+
+		void Emulate_Conv_U(Instruction instr) {
+			var val1 = valueStack.Pop();
+			// The emulator has no notion of "native" sizes, so this is messy.
+			switch (val1.valueType) {
+			case ValueType.Int32:	valueStack.Push(Int64Value.Conv_U8((Int32Value)val1)); break;
+			case ValueType.Int64:	valueStack.Push(Int64Value.Conv_U8((Int64Value)val1)); break;
 			default:				valueStack.Push(Int64Value.CreateUnknown()); break;
 			}
 		}

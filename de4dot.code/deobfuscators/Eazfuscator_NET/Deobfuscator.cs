@@ -140,6 +140,15 @@ namespace de4dot.code.deobfuscators.Eazfuscator_NET {
 				return false;
 			}
 
+			// 下面两条路都在"执行被分析的程序"：内置 worker 把样本改写后当成独立进程跑起来，
+			// 外部 EazUnpacker 内部是同一套探针流程。上游把这类操作统一收进
+			// --unsafe-code-execution，这里必须一起受约束，否则那个开关等于形同虚设。
+			if (!Operations.AllowUnsafeCodeExecution) {
+				Logger.w("Modern Eazfuscator.NET detected, but recovering it requires running the input assembly. " +
+					"Pass --unsafe-code-execution to enable it (DANGEROUS); continuing without string recovery.");
+				return false;
+			}
+
 			// 首选内置后端：只恢复字符串，不换模块，后面交给 staticStringInliner 内联。
 			// 这样 de4dot 自己的重命名/控制流处理全部照旧，也不需要外部 EazUnpacker。
 			// 这一步独立于 --no-eaz-unpack：即使禁用外部解包器，内置 worker 仍然可用。
@@ -220,7 +229,7 @@ namespace de4dot.code.deobfuscators.Eazfuscator_NET {
 				return;
 			}
 
-			stringDecrypter.Initialize(DeobfuscatedFile);
+			stringDecrypter.Initialize(DeobfuscatedFile, Operations.AllowUnsafeCodeExecution);
 			staticStringInliner.Add(stringDecrypter.RealMethod, (method2, gim, args) => {
 				return stringDecrypter.Decrypt((int)args[0]);
 			});

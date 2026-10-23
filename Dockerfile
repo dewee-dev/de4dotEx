@@ -67,13 +67,19 @@ RUN ln -s /app/de4dot/de4dot /usr/local/bin/de4dot && \
 RUN printf '#!/bin/bash\n\
 if [ "$1" = "--mcp" ] || [ "$1" = "-mcp" ]; then\n\
     shift\n\
+    if [ "$1" = "--http" ] && [ -z "$DE4DOT_HTTP_BIND" ]; then export DE4DOT_HTTP_BIND=0.0.0.0; fi\n\
     exec /app/mcp/de4dot.mcp "$@"\n\
 else\n\
     exec /app/de4dot/de4dot "$@"\n\
 fi\n' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
-# Expose HTTP port 8080 (for MCP Web API mode)
+# Expose HTTP port 8080 (for MCP Web API mode; requires DE4DOT_API_TOKEN when bound to 0.0.0.0)
 EXPOSE 8080
+
+# Run unprivileged. de4dot is not a sandbox: some code paths interpret or run code from the input.
+# APP_UID is the non-root "app" user (1654) of the .NET base images. When writing to a bind mount,
+# run with --user "$(id -u):$(id -g)" or make the mounted directory writable for that user.
+USER $APP_UID
 
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["--help"]

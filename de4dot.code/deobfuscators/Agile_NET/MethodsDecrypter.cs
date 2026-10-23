@@ -418,7 +418,7 @@ namespace de4dot.code.deobfuscators.Agile_NET {
 			Error,
 		}
 
-		public bool Decrypt(MyPEImage peImage, ModuleDefMD module, CliSecureRtType csRtType, ref DumpedMethods dumpedMethods) {
+		public bool Decrypt(MyPEImage peImage, ModuleDefMD module, CliSecureRtType csRtType, ref DumpedMethods dumpedMethods, bool allowUnsafeExecution) {
 			this.peImage = peImage;
 			this.csRtType = csRtType;
 			this.module = module;
@@ -430,7 +430,7 @@ namespace de4dot.code.deobfuscators.Agile_NET {
 			case DecryptResult.Error:
 				Logger.n("Using dynamic method decryption");
 				byte[] moduleCctorBytes = GetModuleCctorBytes(csRtType);
-				dumpedMethods = de4dot.code.deobfuscators.MethodsDecrypter.Decrypt(module, moduleCctorBytes);
+				dumpedMethods = de4dot.code.deobfuscators.MethodsDecrypter.Decrypt(module, moduleCctorBytes, allowUnsafeExecution);
 				return true;
 
 			default:
