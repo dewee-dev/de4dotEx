@@ -27,10 +27,13 @@ using de4dot.mdecrypt;
 
 namespace de4dot.code.deobfuscators {
 	public static class MethodsDecrypter {
-		public static DumpedMethods Decrypt(ModuleDef module, byte[] moduleCctorBytes) =>
-			Decrypt(NewProcessAssemblyClientFactory.GetServerClrVersion(module), module.Location, moduleCctorBytes);
+		public static DumpedMethods Decrypt(ModuleDef module, byte[] moduleCctorBytes, bool allowUnsafeExecution) =>
+			Decrypt(NewProcessAssemblyClientFactory.GetServerClrVersion(module), module.Location, moduleCctorBytes, allowUnsafeExecution);
 
-		public static DumpedMethods Decrypt(ServerClrVersion serverVersion, string filename, byte[] moduleCctorBytes) {
+		public static DumpedMethods Decrypt(ServerClrVersion serverVersion, string filename, byte[] moduleCctorBytes, bool allowUnsafeExecution) {
+			if (!allowUnsafeExecution)
+				throw new UnsafeCodeExecutionException();
+
 			Exception lastEx = null;
 			for (int i = 0; i < 5; i++) {
 				try {
