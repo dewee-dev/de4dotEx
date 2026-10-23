@@ -76,8 +76,8 @@ namespace de4dot.cui {
 			stringDecrypterTypes.Add(DecrypterType.None, "none", "Don't decrypt strings");
 			stringDecrypterTypes.Add(DecrypterType.Default, "default", "Use default string decrypter type (usually static)");
 			stringDecrypterTypes.Add(DecrypterType.Static, "static", "Use static string decrypter if available");
-			stringDecrypterTypes.Add(DecrypterType.Delegate, "delegate", "Use a delegate to call the real string decrypter");
-			stringDecrypterTypes.Add(DecrypterType.Emulate, "emulate", "Call real string decrypter and emulate certain instructions");
+			stringDecrypterTypes.Add(DecrypterType.Delegate, "delegate", "Use a delegate to call the real string decrypter (DANGEROUS, runs code from input file)");
+			stringDecrypterTypes.Add(DecrypterType.Emulate, "emulate", "Call real string decrypter and emulate certain instructions (DANGEROUS, runs code from input file)");
 		}
 
 		public CommandLineParser(IList<IDeobfuscatorInfo> deobfuscatorInfos, FilesDeobfuscator.Options filesOptions) {
@@ -145,7 +145,7 @@ namespace de4dot.cui {
 			miscOptions.Add(new NoArgOption(null, "dont-restore-props", "Don't restore properties/events", () => {
 				filesOptions.RenamerFlags &= ~(RenamerFlags.RestorePropertiesFromNames | RenamerFlags.RestoreEventsFromNames);
 			}));
-			miscOptions.Add(new OneArgOption(null, "default-strtyp", "Default string decrypter type", "type", (val) => {
+			miscOptions.Add(new OneArgOption(null, "default-strtyp", "Default string decrypter type (see below for possible types)", "type", (val) => {
 				if (!stringDecrypterTypes.GetValue(val, out object decrypterType))
 					ExitError($"Invalid string decrypter type '{val}'");
 				defaultStringDecrypterType = (DecrypterType)decrypterType;
@@ -290,7 +290,7 @@ namespace de4dot.cui {
 					ExitError($"Invalid obfuscator type '{val}'");
 				newFileOptions.ForcedObfuscatorType = val;
 			}));
-			fileOptions.Add(new OneArgOption(null, "strtyp", "String decrypter type", "type", (val) => {
+			fileOptions.Add(new OneArgOption(null, "strtyp", "String decrypter type (see below for possible types)", "type", (val) => {
 				if (newFileOptions == null)
 					ExitError("Missing input file");
 				if (!stringDecrypterTypes.GetValue(val, out object decrypterType))
